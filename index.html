@@ -1,0 +1,134 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+
+  <link rel="stylesheet" href="stylesheets/stylesheet.css" media="screen"/>
+  <link rel="stylesheet" href="stylesheets/pygment_trac.css"/>
+  <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+  <script type="text/javascript" src="javascripts/script.js"></script>
+
+  <title>EPM</title>
+  <meta name="description" content="EPM is a simple cross-platform tool that generates software and patch distributions in various formats from a list of files.">
+
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+
+</head>
+
+<body>
+
+  <div class="wrapper">
+    <header>
+      <h1 class="title">EPM - ESP Package Manager / Software Packaging Tool</h1>
+      <h1 class="title"><img src="images/epm.png" alt="Telaen"></h1>
+    </header>
+    <div id="container">
+      <p class="tagline">EPM is a simple cross-platform tool that generates software and patch distributions in various formats from a list of files.</p>
+      <div id="main" role="main">
+        <div class="download-bar">
+        <div class="inner">
+          <a href="hhttps://github.com/jimjag/epm/archive/epm-4.5.0-jj.tar.gz" class="download-button tar"><span>Download 4.5.0</span></a>
+          <a href="https://github.com/jimjag/epm/archive/epm-4.5.0-jj.zip" class="download-button zip"><span>Download 4.5.0</span></a>
+          <a href="https://github.com/jimjag/epm" class="code">View EPM on GitHub</a>
+        </div>
+        <span class="blc"></span><span class="trc"></span>
+        </div>
+        <article class="markdown-body">
+<h2>
+<a name="overview" class="anchor" href="#overview"><span class="octicon octicon-link"></span></a>Overview</h2>
+
+<p>EPM is a simple cross-platform tool that generates software and patch distributions in various formats from a list of files. Supported formats include:</p>
+
+<ul>
+<li>AIX software packages (“installp”)</li>
+<li>AT&T software packages (“pkgadd”), used by Solaris and others</li>
+<li>BSD packages (“pkg_create”)</li>
+<li>Compaq Tru64 UNIX (“setld”)</li>
+<li>Debian Package Manager (“dpkg”)</li>
+<li>HP-UX software packages (“swinstall”)</li>
+<li>IRIX software manager (“inst”, “swmgr”, or “tardist”)</li>
+<li>macOS software packages (“name.pkg”)</li>
+<li>Portable (installation and removal scripts with tar files)</li>
+<li>Red Hat Package Manager (“rpm”)</li>
+<li>Slackware software packages (“name.tgz”)</li>
+</ul>
+
+<p>EPM also includes graphical “setup” and “uninstall” programs that can be provided with your distributions to make installation and removal of more than one package a snap. The installers can be customized with product logos, “readme” files, and click-wrap licenses as desired.</p>
+
+<h2>
+<a name="why-you-might-need-it" class="anchor" href="#why-you-might-need-it"><span class="octicon octicon-link"></span></a>Why you might need it</h2>
+
+<P>EPM was designed from the beginning to build binary software
+distributions using a common software specification format. The
+same distribution files work for all operating systems and all
+distribution formats. Supporting source code distributions was
+not a goal since most RPM and Debian source distributions are
+little more than wrapping around a compressed tar file
+containing the source files and a configure script.</P>
+
+<P>Over the years, additional features have made their way into
+EPM to support more advanced software packages. Whenever
+possible, EPM emulates a feature if the vendor package format
+does not support it natively.</P>
+
+<h2>
+<a name="license" class="anchor" href="#license"><span class="octicon octicon-link"></span></a>License</h2>
+
+<p>EPM is free software distributed under GPLv2 terms; see <a href="http://www.gnu.org">www.gnu.org</a> for
+more informations. You can use or redistribute this software, but need to
+preserve the credits of author. Please read LICENSE for information on the
+software availability and distribution.</p>
+
+<h2>
+<a name="documentation" class="anchor" href="#documentation"><span class="octicon octicon-link"></span></a>Documentation</h2>
+
+<p>You'll find some basic user-level docs in the docs folder</p>
+
+<h2>
+<a name="history" class="anchor" href="#history"><span class="octicon octicon-link"></span></a>History</h2>
+
+<p>
+    EPM was originally written by Michael Sweet (https://www.msweet.org/epm/) as part of his Easy Software Products effort.
+    It was for a long time maintained by Michael until around 2018 when development was moved to Maintenance Mode on
+    the project. 
+</p>
+<p>
+    EPM was, and still is, an important dependency for numerous open source projects, especially Apache OpenOffice, which uses EPM to create
+    our complimentary community builds. I (jimjag), saw the need to keep EPM alive and kicking, as well as officially folding into
+    the project the various AOO features needed by the OpenOffice project. Also, we needed to continue to support some platforms that
+    the official EPM distro deprecated.
+</p>
+<p>
+    With all that in mind, jimjag contacted Michael and offered to take on and "take over" active development and maintenance of EPM, to which Michael graciously agreed to.
+</p>
+<h2>
+<a name="contributing" class="anchor" href="#contributing"><span class="octicon octicon-link"></span></a>Contributing</h2>
+
+<p>Please submit bug reports, suggestions and pull requests to the <a href="https://github.com/jimjag/epm/issues">GitHub issue tracker</a>.</p>
+
+<p>We're particularly interested in fixing edge-cases, expanding test coverage and adding additional package formats.</p>
+
+        </article>
+      </div>
+    </div>
+    <footer>
+      <div class="owner">
+      <p><a href="https://github.com/jimjag" class="avatar"><img src="https://secure.gravatar.com/avatar/a86203bd1e538f2a4e58eb8850fb66ef?s=30&amp;d=https://a248.e.akamai.net/assets.github.com%2Fimages%2Fgravatars%2Fgravatar-user-420.png" width="48" height="48"/></a> <a href="https://github.com/jimjag">jimjag</a> maintains <a href="https://github.com/jimjag/epm">EPM</a></p>
+
+
+      </div>
+      <div class="creds">
+        <small>This page generated using <a href="https://pages.github.com/">GitHub Pages</a><br/>theme by <a href="http://twitter.com/jonrohan/">Jon Rohan</a></small>
+      </div>
+    </footer>
+  </div>
+  <div class="current-section">
+    <a href="#top">Scroll to top</a>
+    <a href="https://github.com/jimjag/epm/tarball/master" class="tar">tar</a><a href="https://github.com/jimjag/epm/zipball/master" class="zip">zip</a><a href="" class="code">source code</a>
+    <p class="name"></p>
+  </div>
+
+  
+</body>
+</html>

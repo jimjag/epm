@@ -390,9 +390,9 @@ if test "x$RPM" != x; then
 		AC_DEFINE_UNQUOTED(EPM_RPMARCH, "--buildarch ")
 	else
 		if test $rpmversion -ge 40003; then
-			AC_DEFINE_UNQUOTED(EPM_RPMARCH, "--target ")
-		else
 			AC_DEFINE_UNQUOTED(EPM_RPMARCH, "--target=")
+		else
+			AC_DEFINE_UNQUOTED(EPM_RPMARCH, "--target ")
 		fi
 	fi
 fi
@@ -400,7 +400,18 @@ fi
 if test "x$RPMBUILD" != x; then
 	AC_DEFINE_UNQUOTED(EPM_RPMBUILD, "$RPMBUILD")
 	AC_DEFINE(EPM_RPMTOPDIR)
-	AC_DEFINE_UNQUOTED(EPM_RPMARCH, "--buildarch ")
+	# It would be nice if Red Hat could make up its mind...
+	rpmversion="`$RPMBUILD --version | awk '{print $3}' | awk -F. '{print $1 * 10000 + $2 * 100 + $3}'`"
+
+	if test $rpmversion -lt 30000; then
+		AC_DEFINE_UNQUOTED(EPM_RPMARCH, "--buildarch ")
+	else
+		if test $rpmversion -ge 40003; then
+			AC_DEFINE_UNQUOTED(EPM_RPMARCH, "--target=")
+		else
+			AC_DEFINE_UNQUOTED(EPM_RPMARCH, "--target ")
+		fi
+	fi
 else
 	if test "x$RPM" != x; then
 		AC_DEFINE_UNQUOTED(EPM_RPMBUILD, "$RPM")

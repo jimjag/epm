@@ -571,16 +571,35 @@ i 755 root sys foo foo.sh "runlevel(02) start(50) stop(30)"
 <P>Sometimes you need to include format-specific package data such as
 keywords, signing keys, and response data. The <CODE>%literal(section)</CODE>
 directive adds format-specific data to the packages you create. Literal
-data is currently only supported for RPM and PKG packages.</P>
+data is currently only supported for DEB, RPM and PKG packages.</P>
 
 <H3>Debian Literal Data</H3>
 
-<p>Debian packages have control files that provide metadata for each package. The <CODE>%literal(control)</CODE> directive can be used to provide this metadata:</P>
+<p>Debian packages have control files that provide metadata for each package.
+The <CODE>%literal(control)</CODE> directive can be used to provide this
+metadata:</P>
 
 <PRE>
 %literal(control) &lt;&lt;EOF
 Section: misc
 Priority: extra
+EOF
+</PRE>
+
+<p>Debian packages support template files to define the metadata associated with
+configuration variables.  The <CODE>%literal(templates)</CODE> directive can be
+used to provide this metadata:</p>
+
+<PRE>
+%literal(templates) &lt;&lt;EOF 
+Template: canpi-server/reboot
+Type: boolean
+Description: Would you like to reboot to complete the package installation ?
+ The package installation updates the device table overlay definition.
+ For these changes to take effect the system must be restarted.
+ The canpi daemon is not started by the package installation as the lack of /dev/can0
+ will cause it to fail immediately.
+
 EOF
 </PRE>
 

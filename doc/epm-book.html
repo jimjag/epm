@@ -1282,6 +1282,22 @@ Section: misc
 Priority: extra
 EOF
 </pre>
+<p>Debian packages support template files to define the metadata associated with
+  configuration variables.  The <CODE>%literal(templates)</CODE> directive can be
+  used to provide this metadata:</p>
+  
+  <PRE>
+  %literal(templates) &lt;&lt;EOF 
+  Template: canpi-server/reboot
+  Type: boolean
+  Description: Would you like to reboot to complete the package installation ?
+   The package installation updates the device table overlay definition.
+   For these changes to take effect the system must be restarted.
+   The canpi daemon is not started by the package installation as the lack of /dev/can0
+   will cause it to fail immediately.
+  
+  EOF
+  </PRE>
 <h3>PKG Literal Data</h3>
 <p>PKG packages support request files that are used to do batch
  installations when installation commands require user input. The <code>

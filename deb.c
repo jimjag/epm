@@ -337,6 +337,72 @@ make_subpackage(const char *prodname,     /* I - Product short name */
     fclose(fp);
 
     /*
+     * Write the config file for DPKG...
+     */
+
+    for (i = dist->num_commands, c = dist->commands; i > 0; i--, c++)
+        if (c->type == COMMAND_LITERAL && c->subpackage == subpackage &&
+            !strcmp(c->section, "config"))
+            break;
+
+    if (i) {
+        if (Verbosity)
+            puts("Creating config file...");
+
+        snprintf(filename, sizeof(filename), "%s/%s/DEBIAN/config", directory, name);
+
+        if ((fp = fopen(filename, "w")) == NULL) {
+            fprintf(stderr, "epm: Unable to create config file \"%s\": %s\n", filename,
+                    strerror(errno));
+            return (1);
+        }
+
+        fchmod(fileno(fp), 0755);
+
+        fputs("#!/bin/sh\n", fp);
+        fputs("# " EPM_VERSION "\n", fp);
+        fputs("set -e\n", fp);
+
+        for (; i > 0; i--, c++)
+            if (c->type == COMMAND_LITERAL && c->subpackage == subpackage &&
+                !strcmp(c->section, "config"))
+                fprintf(fp, "%s\n", c->command);
+
+        fclose(fp);
+    }
+
+    /*
+     * Write the templates file for DPKG...
+     */
+
+    for (i = dist->num_commands, c = dist->commands; i > 0; i--, c++)
+        if (c->type == COMMAND_LITERAL && c->subpackage == subpackage &&
+            !strcmp(c->section, "templates"))
+            break;
+
+    if (i) {
+        if (Verbosity)
+            puts("Creating templates file...");
+
+        snprintf(filename, sizeof(filename), "%s/%s/DEBIAN/templates", directory, name);
+
+        if ((fp = fopen(filename, "w")) == NULL) {
+            fprintf(stderr, "epm: Unable to create template file \"%s\": %s\n", filename,
+                    strerror(errno));
+            return (1);
+        }
+
+        fchmod(fileno(fp), 0644);
+
+        for (; i > 0; i--, c++)
+            if (c->type == COMMAND_LITERAL && c->subpackage == subpackage &&
+                !strcmp(c->section, "templates"))
+                fprintf(fp, "%s\n", c->command);
+
+        fclose(fp);
+    }
+
+    /*
      * Write the preinst file for DPKG...
      */
 
@@ -360,6 +426,7 @@ make_subpackage(const char *prodname,     /* I - Product short name */
 
         fputs("#!/bin/sh\n", fp);
         fputs("# " EPM_VERSION "\n", fp);
+        fputs("set -e\n", fp);
 
         for (; i > 0; i--, c++)
             if (c->type == COMMAND_PRE_INSTALL && c->subpackage == subpackage)
@@ -397,6 +464,7 @@ make_subpackage(const char *prodname,     /* I - Product short name */
 
         fputs("#!/bin/sh\n", fp);
         fputs("# " EPM_VERSION "\n", fp);
+        fputs("set -e\n", fp);
 
         for (i = dist->num_commands, c = dist->commands; i > 0; i--, c++)
             if (c->type == COMMAND_POST_INSTALL && c->subpackage == subpackage)
@@ -445,6 +513,7 @@ make_subpackage(const char *prodname,     /* I - Product short name */
 
         fputs("#!/bin/sh\n", fp);
         fputs("# " EPM_VERSION "\n", fp);
+        fputs("set -e\n", fp);
 
         for (i = dist->num_commands, c = dist->commands; i > 0; i--, c++)
             if (c->type == COMMAND_PRE_REMOVE && c->subpackage == subpackage)
@@ -486,6 +555,7 @@ make_subpackage(const char *prodname,     /* I - Product short name */
 
         fputs("#!/bin/sh\n", fp);
         fputs("# " EPM_VERSION "\n", fp);
+        fputs("set -e\n", fp);
 
         for (i = dist->num_commands, c = dist->commands; i > 0; i--, c++)
             if (c->type == COMMAND_POST_REMOVE && c->subpackage == subpackage)

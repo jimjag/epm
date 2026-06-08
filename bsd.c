@@ -200,9 +200,9 @@ make_subpackage(const char *prodname,   /* I - Product short name */
         if (d->type == DEPEND_REQUIRES) {
 #ifdef __FreeBSD__
             if (AooMode) {
-                if (dist->relnumber) {
+                if (dist->vernumber) {
                     fprintf(fp, "@pkgdep %s-%s-%d-%s", d->product, dist->version,
-                            dist->relnumber, platname);
+                            dist->vernumber, platname);
                 } else {
                     fprintf(fp, "@pkgdep %s-%s-%s", d->product, dist->version, platname);
                 }

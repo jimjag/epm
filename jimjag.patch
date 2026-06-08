@@ -4157,7 +4157,7 @@ index 2da9ea4..8b1657f 100644
 +#endif /* __FOR_AOO__ */
    puts("");
    puts("EPM is free software and comes with ABSOLUTELY NO WARRANTY; for details");
-   puts("see the GNU General Public License in the file COPYING or at");
+   puts("see the GNU General Public License in the file LICENSE or at");
 @@ -613,7 +677,7 @@ usage(void)
    puts("    Use the named architecture instead of the local one.");
    puts("-g");

@@ -32,7 +32,7 @@ $srcdir=.
 
 <P>Then we provide the general product information that is
 required for all packages; notice the use of
-<CODE>${srcdir}</CODE> to reference the COPYING and README
+<CODE>${srcdir}</CODE> to reference the LICENSE and README
 files:</P>
 
 <PRE>
@@ -41,7 +41,7 @@ files:</P>
 %copyright 2020 by Jim Jagielski, All Rights Reserved.
 %vendor Michael R Sweet
 %vendor Jim Jagielski
-%license ${srcdir}/COPYING
+%license ${srcdir}/LICENSE
 %readme ${srcdir}/README.md
 %description Universal software packaging tool for UNIX.
 %version 4.6 460
@@ -61,7 +61,7 @@ f 0555 root sys ${bindir}/mkepmlist mkepmlist
 %subpackage documentation
 %description Documentation for EPM
 f 0444 root sys ${docdir}/README $srcdir/README.md
-f 0444 root sys ${docdir}/COPYING $srcdir/COPYING
+f 0444 root sys ${docdir}/LICENSE $srcdir/LICENSE
 f 0444 root sys ${docdir}/epm-book.epub $srcdir/doc/epm-book.epub
 f 0444 root sys ${docdir}/epm-book.html $srcdir/doc/epm-book.html
 f 0444 root sys ${docdir}/epm-book.pdf $srcdir/doc/epm-book.pdf

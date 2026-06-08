@@ -95,7 +95,7 @@ install:
 	done
 	echo Installing EPM documentation in $(BUILDROOT)$(docdir)
 	$(INSTALL) -d -m 755 $(BUILDROOT)$(docdir)
-	for file in $(srcdir)/../LICENSE $(srcdir)/../README.md $(BOOKS); do \
+	for file in $(top_srcdir)/LICENSE $(top_srcdir)/README.md $(BOOKS); do \
 		$(INSTALL) -c -m 644 $$file $(BUILDROOT)$(docdir); \
 	done
 

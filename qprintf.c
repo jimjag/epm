@@ -22,6 +22,7 @@
  * Include necessary headers...
  */
 
+#include "epm.h"
 #include "epmstring.h"
 #include <ctype.h>
 #include <stdio.h>

@@ -204,8 +204,10 @@ void strip_execs(dist_t *dist) /* I - Distribution to strip... */
                  * Read the first 3 bytes of the file...
                  */
 
-                if (fread(header, 1, sizeof(header) - 1, fp) == 0)
+                if (fread(header, 1, sizeof(header) - 1, fp) == 0) {
+                    fclose(fp);
                     continue;
+                }
 
                 header[sizeof(header) - 1] = '\0';
 

@@ -1,6 +1,29 @@
 Changes in EPM
 ==============
 
+Changes in EPM 5.0.1
+--------------------
+
+- Added support for `%literal(config)` and `%literal(templates)` sections in
+  Debian packages, generating the DEBIAN/config and DEBIAN/templates files
+  (debconf) (PR #16)
+- Debian maintainer scripts (preinst/postinst/prerm/postrm) and the new config
+  script are now generated with `set -e`, so they abort on the first failing
+  command. NOTE: list files with maintainer-script commands that relied on a
+  non-zero exit being ignored will now fail the install/removal (PR #16)
+- Fixed a `%arch` off-by-two, an overlapping `memcpy`, and a file-descriptor
+  leak in `strip_execs`
+- FreeBSD: fixed a build regression - use `vernumber` instead of the
+  non-existent `relnumber`, and include `epm.h` for `AooMode` in `qprintf.c`
+- Renamed the license file from `COPYING` to `LICENSE` and corrected the
+  `doc/Makefile.in` `install` target to copy `LICENSE` and `README.md` from the
+  top source directory
+- `make test` now passes all tests; only the first `%copyright` line in a list
+  file is used (latest first), subsequent lines are ignored
+- Fixed `rpmbuild --target` for RPM versions greater than 4, which incorrectly
+  used the old `--build-arch` argument
+- Updated bundled `config.guess` and `config.sub`
+
 Changes in EPM 5.0.0
 --------------------
 

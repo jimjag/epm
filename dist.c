@@ -1088,7 +1088,7 @@ void sort_dist_files(dist_t *dist) /* I - Distribution to sort */
                  * Ignore exact duplicates...
                  */
 
-                memcpy(file, file + 1, i * sizeof(file_t));
+                memmove(file, file + 1, i * sizeof(file_t));
                 dist->num_files--;
                 file--;
             } else
@@ -1608,7 +1608,7 @@ get_line(char *buffer,             /* I - Buffer to read into */
             *skip &= ~SKIP_ARCH;
 
             if (strcmp(buffer + 6, "all\n")) {
-                bufptr = buffer + 8;
+                bufptr = buffer + 6;
 
                 while (isspace(*bufptr & 255))
                     bufptr++;

@@ -8,4 +8,10 @@ preface.html
 5-examples.html
 a-license.html
 b-manpages.html
+epm.html
+epminstall.html
+mkepmlist.html
+epm.list.html
+setup.html
+setup.types.html
 c-reference.html

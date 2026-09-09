@@ -3,7 +3,7 @@
 <HEAD>
 <TITLE>Software Distribution with ESP Package Manager</TITLE>
 <META NAME="author" CONTENT="Michael R Sweet, Jim Jagielski">
-<META NAME="copyright" CONTENT="Copyright ï¿½ 1999-2020 by Michael R Sweet">
+<META NAME="copyright" CONTENT="Copyright © 1999-2020 by Michael R Sweet">
 <META HTTP-EQUIV="Content-Type" CONTENT="text/html; CHARSET=iso-8859-1">
 <STYLE TYPE="text/css"><!--
 BODY { font-family: sans-serif; }
@@ -109,7 +109,9 @@ A { text-decoration: none; }
 <li><a HREF="#epm">epm(1)</a></li>
 <li><a HREF="#epminstall">epminstall(1)</a></li>
 <li><a HREF="#mkepmlist">mkepmlist(1)</a></li>
+<li><a HREF="#epm.list">epm.list(5)</a></li>
 <li><a HREF="#setup">setup(1)</a></li>
+<li><a HREF="#setup.types">setup.types(5)</a></li>
 </ul>
 <b><a HREF="#REFERENCE">C - List File Reference</a></b>
 <ul>
@@ -1271,7 +1273,7 @@ i 755 root sys foo foo.sh &quot;runlevel(02) start(50) stop(30)&quot;
 <p>Sometimes you need to include format-specific package data such as
  keywords, signing keys, and response data. The <code>%literal(section)</code>
  directive adds format-specific data to the packages you create. Literal
- data is currently only supported for RPM and PKG packages.</p>
+ data is currently only supported for DEB, RPM and PKG packages.</p>
 <h3>Debian Literal Data</h3>
 <p>Debian packages have control files that provide metadata for each
  package. The <code>%literal(control)</code> directive can be used to
@@ -1282,22 +1284,21 @@ Section: misc
 Priority: extra
 EOF
 </pre>
-<p>Debian packages support template files to define the metadata associated with
-  configuration variables.  The <CODE>%literal(templates)</CODE> directive can be
-  used to provide this metadata:</p>
-  
-  <PRE>
-  %literal(templates) &lt;&lt;EOF 
-  Template: canpi-server/reboot
-  Type: boolean
-  Description: Would you like to reboot to complete the package installation ?
-   The package installation updates the device table overlay definition.
-   For these changes to take effect the system must be restarted.
-   The canpi daemon is not started by the package installation as the lack of /dev/can0
-   will cause it to fail immediately.
-  
-  EOF
-  </PRE>
+<p>Debian packages support template files to define the metadata
+ associated with configuration variables. The <code>%literal(templates)</code>
+ directive can be used to provide this metadata:</p>
+<pre>
+%literal(templates) &lt;&lt;EOF 
+Template: canpi-server/reboot
+Type: boolean
+Description: Would you like to reboot to complete the package installation ?
+ The package installation updates the device table overlay definition.
+ For these changes to take effect the system must be restarted.
+ The canpi daemon is not started by the package installation as the lack of /dev/can0
+ will cause it to fail immediately.
+
+EOF
+</pre>
 <h3>PKG Literal Data</h3>
 <p>PKG packages support request files that are used to do batch
  installations when installation commands require user input. The <code>
@@ -1619,8 +1620,7 @@ http://www.apache.org/licenses/</a></p>
  permissions and limitations under the License.</code></div></div></div></div>
 </div><HR NOSHADE>
 <h1><a NAME="MANPAGES">B - Command Reference</a></h1>
-
-<!-- NEW PAGE -->
+<HR NOSHADE>
 
 <!-- SECTION: Man Pages -->
 <h2 class="title"><a name="epm">epm(1)</a></h2>
@@ -1663,8 +1663,12 @@ mrs</b>] ] [<b> -s</b><i> setup.ext</i> ] [<b> --depend</b> ] [<b>
 <dd style="margin-left: 5.0em"></dd>
 <dt><b>-f macos-signed</b></dt>
 <dd style="margin-left: 5.0em">Generate a macOS software package. The<i>
- macos-signed</i> format uses the signing identity in the
- EPM_SIGNING_IDENTITY environment variable.</dd>
+ macos-signed</i> format signs the package with the installer identity
+ in the EPM_SIGNING_IDENTITY environment variable. If
+ EPM_APPLICATION_IDENTITY is also set, the Mach-O files and bundles in
+ the package payload and the resulting disk image are signed with that
+ application identity, and the disk image is notarized when
+ EPM_NOTARY_KEYCHAIN_PROFILE is set.</dd>
 <dt><b>-f portable</b></dt>
 <dd style="margin-left: 5.0em">Generate a portable distribution based on
  shell scripts and tar files. The resulting distribution is installed
@@ -1734,7 +1738,26 @@ mrs</b>] ] [<b> -s</b><i> setup.ext</i> ] [<b> --depend</b> ] [<b>
 <dl class="man">
 <dt><b>EPM_SIGNING_IDENTITY</b></dt>
 <dd style="margin-left: 5.0em">The common name that should be used when
- signing a package.</dd>
+ signing a package. For the<i> macos-signed</i> format this is an
+ installer identity, typically &quot;Developer ID Installer&quot;, and it defaults
+ to that value.</dd>
+<dt><b>EPM_APPLICATION_IDENTITY</b></dt>
+<dd style="margin-left: 5.0em">The common name of the application
+ identity, typically &quot;Developer ID Application&quot;, used to sign
+ executables and disk images. For the<i> macos-signed</i> format,
+ setting this enables signing of the Mach-O files and bundles in the
+ package payload and of the resulting disk image. Executables are signed
+ with the hardened runtime, which is required for notarization. When
+ this variable is unset no application signing is performed.</dd>
+<dt><b>EPM_SIGNING_ENTITLEMENTS</b></dt>
+<dd style="margin-left: 5.0em">The path of an entitlements property list
+ to apply when signing executables with EPM_APPLICATION_IDENTITY.</dd>
+<dt><b>EPM_NOTARY_KEYCHAIN_PROFILE</b></dt>
+<dd style="margin-left: 5.0em">The name of a keychain profile created
+ with &quot;xcrun notarytool store-credentials&quot;. When set together with
+ EPM_APPLICATION_IDENTITY, the<i> macos-signed</i> format submits the
+ disk image to the Apple notary service and staples the resulting ticket
+ to it.</dd>
 </dl>
 <h3 class="title"><a name="LIST_FILES">List Files</a></h3>
  The EPM list file format is now described in the<i> epm.list(5)</i> man
@@ -1756,8 +1779,7 @@ http://www.apache.org/licenses/LICENSE-2.0</a></p>
  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
  implied. See the License for the specific language governing
  permissions and limitations under the License.</p>
-
-<!-- NEW PAGE -->
+<HR NOSHADE>
 
 <!-- SECTION: Man Pages -->
 <h2 class="title"><a name="epminstall">epminstall(1)</a></h2>
@@ -1818,8 +1840,7 @@ http://www.apache.org/licenses/LICENSE-2.0</a></p>
  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
  implied. See the License for the specific language governing
  permissions and limitations under the License.</p>
-
-<!-- NEW PAGE -->
+<HR NOSHADE>
 
 <!-- SECTION: Man Pages -->
 <h2 class="title"><a name="mkepmlist">mkepmlist(1)</a></h2>
@@ -1870,8 +1891,287 @@ http://www.apache.org/licenses/LICENSE-2.0</a></p>
  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
  implied. See the License for the specific language governing
  permissions and limitations under the License.</p>
+<HR NOSHADE>
 
-<!-- NEW PAGE -->
+<!-- SECTION: Man Pages -->
+<h2 class="title"><a name="epm.list">epm.list(5)</a></h2>
+<h3 class="title"><a name="NAME">Name</a></h3>
+ epm.list - epm list file format.
+<h3 class="title"><a name="DESCRIPTION">Description</a></h3>
+ Each <a href="#epm"><b>epm</b>(1)</a> product has an associated list
+ file that describes the files to include with the product. Comment
+ lines begin with the &quot;#&quot; character and are ignored. All other non-blank
+ lines must begin with a letter, dollar sign (&quot;$&quot;), or the percent sign
+ (&quot;%&quot;) as follows:
+<dl class="man">
+<dt>$name=value</dt>
+<dd style="margin-left: 5.0em">Sets the named variable to<i> value</i>.<b>
+ Note:</b> Variables set in the list file are overridden by variables
+ specified on the command-line or in the current environment.</dd>
+<dt>%arch all</dt>
+<dd style="margin-left: 5.0em">Uses following files and directives on
+ all processor architectures.</dd>
+<dt>%arch<i> architecture [... architecture]</i></dt>
+<dd style="margin-left: 5.0em">Uses following files and directives on
+ the named processor architectures.</dd>
+<dt>%arch !<i>architecture [... architecture]</i></dt>
+<dd style="margin-left: 5.0em">Uses following files and directives on
+ all but the named processor architectures.</dd>
+<dt>%copyright<i> copyright notice</i></dt>
+<dd style="margin-left: 5.0em">Sets the copyright notice for the file.</dd>
+<dt>%description<i> description text</i></dt>
+<dd style="margin-left: 5.0em">Adds a line of descriptive text to the
+ distribution. Multiple lines are supported.</dd>
+<dt>%format<i> format [... format]</i></dt>
+<dd style="margin-left: 5.0em">Uses following files and directives only
+ if the distribution format is the same as<i> format</i>.</dd>
+<dt>%format !<i>format [... format]</i></dt>
+<dd style="margin-left: 5.0em">Uses following files and directives only
+ if the distribution format is not the same as<i> format</i>.</dd>
+<dt>%if<i> variable</i> [... variable]</dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%if !<i>variable</i> [... variable]</dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%ifdef<i> variable</i> [... variable]</dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%ifdef !<i>variable</i> [... variable]</dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%elseif<i> variable</i> [... variable]</dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%elseif !<i>variable</i> [... variable]</dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%elseifdef<i> variable</i> [... variable]</dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%elseifdef !<i>variable</i> [... variable]</dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%else</dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%endif</dt>
+<dd style="margin-left: 5.0em">Conditionally includes lines in the list
+ file. The<i> %if</i> lines include the lines that follow if the named
+ variables are (not) defined with a value. The<i> %ifdef</i> lines
+ include the lines that follow if the named variables are (not) defined
+ with any value. These conditional lines cannot be nested.</dd>
+<dt>%include<i> filename</i></dt>
+<dd style="margin-left: 5.0em">Includes files listed in<i> filename</i>.</dd>
+<dt>%incompat<i> product</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%incompat<i> filename</i></dt>
+<dd style="margin-left: 5.0em">Indicates that this product is
+ incompatible with the named product or file.</dd>
+<dt>%install<i> script or program</i></dt>
+<dd style="margin-left: 5.0em">Specifies a script or program to be run
+ after all files are installed. (This has been obsoleted by the
+ %postinstall directive)</dd>
+<dt>%license<i> license file</i></dt>
+<dd style="margin-left: 5.0em">Specifies the file to display as the
+ software license.</dd>
+<dt>%literal(section)<i> line</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%literal(section) &lt;<i>file</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%literal(section) &lt;&lt;<i>string</i></dt>
+<dd style="margin-left: 5.0em">Specifies format-specific literal data
+ for packaging. Currently only supported for RPM and PKG packages.</dd>
+<dt>%packager<i> name of packager</i></dt>
+<dd style="margin-left: 5.0em">Specifies the name of the packager.</dd>
+<dt>%patch<i> script or program</i></dt>
+<dd style="margin-left: 5.0em">Specifies a script or program to be run
+ after all files are patched. (This has been obsoleted by the %postpatch
+ directive)</dd>
+<dt>%postinstall<i> script or program</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%postinstall &lt;<i>scriptfile</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%postinstall &lt;&lt;<i>string</i></dt>
+<dd style="margin-left: 5.0em">Specifies a script or program to be run
+ after all files are installed.</dd>
+<dt>%postpatch<i> script or program</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%postpatch &lt;<i>scriptfile</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%postpatch &lt;&lt;<i>string</i></dt>
+<dd style="margin-left: 5.0em">Specifies a script or program to be run
+ after all files are patched.</dd>
+<dt>%postremove<i> script or program</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%postremove &lt;<i>scriptfile</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%postremove &lt;&lt;<i>string</i></dt>
+<dd style="margin-left: 5.0em">Specifies a script or program to be run
+ after removing files.</dd>
+<dt>%preinstall<i> script or program</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%preinstall &lt;<i>scriptfile</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%preinstall &lt;&lt;<i>string</i></dt>
+<dd style="margin-left: 5.0em">Specifies a script or program to be run
+ before all files are installed.</dd>
+<dt>%prepatch<i> script or program</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%prepatch &lt;<i>scriptfile</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%prepatch &lt;&lt;<i>string</i></dt>
+<dd style="margin-left: 5.0em">Specifies a script or program to be run
+ before all files are patched.</dd>
+<dt>%preremove<i> script or program</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%preremove &lt;<i>scriptfile</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%preremove &lt;&lt;<i>string</i></dt>
+<dd style="margin-left: 5.0em">Specifies a script or program to be run
+ before removing files.</dd>
+<dt>%product<i> product name</i></dt>
+<dd style="margin-left: 5.0em">Specifies the product name.</dd>
+<dt>%readme<i> readme file</i></dt>
+<dd style="margin-left: 5.0em">Specifies a README file to be included in
+ the distribution.</dd>
+<dt>%remove<i> script or program</i></dt>
+<dd style="margin-left: 5.0em">Specifies a script or program to be run
+ before removing files. (This has been obsoleted by the %preremove
+ directive)</dd>
+<dt>%release<i> number</i></dt>
+<dd style="margin-left: 5.0em">Specifies the release or build number of
+ a product (defaults to 0).</dd>
+<dt>%replaces<i> product</i></dt>
+<dd style="margin-left: 5.0em">Indicates that this product replaces the
+ named product.</dd>
+<dt>%requires<i> product</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%requires<i> filename</i></dt>
+<dd style="margin-left: 5.0em">Indicates that this product requires the
+ named product or file.</dd>
+<dt>%subpackage</dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>%subpackage<i> name</i></dt>
+<dd style="margin-left: 5.0em">Selects the named subpackage; if no name
+ is given, selects the main (parent) package.</dd>
+<dt>%vendor<i> vendor or author name</i></dt>
+<dd style="margin-left: 5.0em">Specifies the vendor or author of the
+ product.</dd>
+<dt>%version<i> version number</i></dt>
+<dd style="margin-left: 5.0em">Specifies the version number of the
+ product.</dd>
+<dt>%system<i> system[-release] [... system[-release]]</i></dt>
+<dd style="margin-left: 5.0em">Specifies that the following files should
+ only be used for the specified operating systems and releases.</dd>
+<dt>%system !<i>system[-release] [... system[-release]]</i></dt>
+<dd style="margin-left: 5.0em">Specifies that the following files should
+ not be used for the specified operating systems and releases.</dd>
+<dt>%system all</dt>
+<dd style="margin-left: 5.0em">Specifies that the following files are
+ applicable to all operating systems.</dd>
+<dt>c<i> mode user group destination source</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>C<i> mode user group destination source</i></dt>
+<dd style="margin-left: 5.0em">Specifies a configuration file for
+ installation. The second form specifies that the file has changed or is
+ new and should be included as part of a patch. Configuration files are
+ installed as &quot;destination.N&quot; if the destination already exists.</dd>
+<dt>d<i> mode user group destination -</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>D<i> mode user group destination -</i></dt>
+<dd style="margin-left: 5.0em">Specifies a directory should be created
+ when installing the software. The second form specifies that the
+ directory is new and should be included as part of a patch.</dd>
+<dt>f<i> mode user group destination source [nostrip()]</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>F<i> mode user group destination source [nostrip()]</i></dt>
+<dd style="margin-left: 5.0em">Specifies a file for installation. The
+ second form specifies that the file has changed or is new and should be
+ included as part of a patch. If the &quot;nostrip()&quot; option is included, the
+ file will not be stripped before the installation is created.</dd>
+<dt>f<i> mode user group destination source/pattern [nostrip()]</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>F<i> mode user group destination source/pattern [nostrip()]</i></dt>
+<dd style="margin-left: 5.0em">Specifies one or more files for
+ installation using shell wildcard patterns. The second form specifies
+ that the files have changed or are new and should be included as part
+ of a patch. If the &quot;nostrip()&quot; option is included, the file will not be
+ stripped before the installation is created.</dd>
+<dt>i<i> mode user group service-name source [&quot;options&quot;]</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>I<i> mode user group service-name source [&quot;options&quot;]</i></dt>
+<dd style="margin-left: 5.0em">Specifies an initialization script for
+ installation. The second form specifies that the file has changed or is
+ new and should be included as part of a patch. Initialization scripts
+ are stored in /etc/software/init.d and are linked to the appropriate
+ system-specific directories for run levels 0, 2, 3, and 5.
+ Initialization scripts<b> must</b> accept at least the<i> start</i> and<i>
+ stop</i> commands. The optional<i> options</i> following the source
+ filename can be any of the following:</dd>
+<dt> order(<i>string</i>)</dt>
+<dd style="margin-left: 10.0em">Specifies the relative startup order
+ compared to the required and used system functions. Supported values
+ include First, Early, None, Late, and Last (macOS only).</dd>
+<dt> provides(<i>name(s)</i>)</dt>
+<dd style="margin-left: 10.0em">Specifies names of system functions that
+ are provided by this startup item (macOS only).</dd>
+<dt> requires(<i>name(s)</i>)</dt>
+<dd style="margin-left: 10.0em">Specifies names of system functions that
+ are required by this startup item (macOS only).</dd>
+<dt> runlevel(<i>levels</i>)</dt>
+<dd style="margin-left: 10.0em">Specifies the run levels to use.</dd>
+<dt> start(<i>number</i>)</dt>
+<dd style="margin-left: 10.0em">Specifies the starting sequence number
+ from 00 to 99.</dd>
+<dt> stop(<i>number</i>)</dt>
+<dd style="margin-left: 10.0em">Specifies the ending sequence number
+ from 00 to 99.</dd>
+<dt> uses(<i>name(s)</i>)</dt>
+<dd style="margin-left: 10.0em">Specifies names of system functions that
+ are used by this startup item (macOS only).</dd>
+<dt>l<i> mode user group destination source</i></dt>
+<dd style="margin-left: 5.0em"></dd>
+<dt>L<i> mode user group destination source</i></dt>
+<dd style="margin-left: 5.0em">Specifies a symbolic link in the
+ installation. The second form specifies that the link has changed or is
+ new and should be included as part of a patch.</dd>
+<dt>R<i> mode user group destination</i></dt>
+<dd style="margin-left: 5.0em">Specifies that the file is to be removed
+ upon patching. The<i> user</i> and<i> group</i> fields are ignored. The<i>
+ mode</i> field is only used to determine if a check should be made for
+ a previous version of the file.</dd>
+</dl>
+<h3 class="title"><a name="LIST_VARIABLES">List Variables</a></h3>
+<i> EPM</i> maintains a list of variables and their values which can be
+ used to substitute values in the list file. These variables are
+ imported from the current environment and taken from the command-line
+ and list file as provided. Substitutions occur when the variable name
+ is referenced with the dollar sign ($):
+<pre class="man">
+<br>
+
+    %postinstall &lt;&lt;EOF
+    echo What is your name:
+    read $$name
+    Your name is $$name
+    EOF
+
+    f 0555 root sys ${bindir}/foo foo
+    f 0555 root sys $datadir/foo/foo.dat foo.dat
+</pre>
+<p>Variable names can be surrounded by curley brackets (${name}) or
+ alone ($name); without brackets the name is terminated by the first
+ slash (/), dash (-), or whitespace. The dollar sign can be inserted
+ using $$.</p>
+<h3 class="title"><a name="SEE_ALSO">See Also</a></h3>
+ <a href="#epm"><b>epm</b>(1),</a> <a href="#epminstall"><b>epminstall</b>
+(1),</a> <a href="#mkepmlist"><b>mkepmlist</b>(1).</a>
+<h3 class="title"><a name="COPYRIGHT">Copyright</a></h3>
+ Copyright &copy; 1999-2020 by Michael R Sweet, All Rights Reserved.
+ Copyright &copy; 2020 by Jim Jagielski, All Rights Reserved.
+<p>Licensed under the Apache License, Version 2.0 (the &quot;License&quot;); you
+ may not use this file except in compliance with the License. You may
+ obtain a copy of the License at</p>
+<p> <a href="http://www.apache.org/licenses/LICENSE-2.0">
+http://www.apache.org/licenses/LICENSE-2.0</a></p>
+<p>Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ implied. See the License for the specific language governing
+ permissions and limitations under the License.</p>
+<HR NOSHADE>
 
 <!-- SECTION: Man Pages -->
 <h2 class="title"><a name="setup">setup(1)</a></h2>
@@ -1894,6 +2194,59 @@ http://www.apache.org/licenses/LICENSE-2.0</a></p>
 <h3 class="title"><a name="SEE_ALSO">See Also</a></h3>
  <a href="#epm"><b>epm</b>(1),</a> <a href="#setup.types"><b>setup.types</b>
 (5).</a>
+<h3 class="title"><a name="COPYRIGHT">Copyright</a></h3>
+ Copyright &copy; 1999-2020 by Michael R Sweet, All Rights Reserved.
+ Copyright &copy; 2020 by Jim Jagielski, All Rights Reserved.
+<p>Licensed under the Apache License, Version 2.0 (the &quot;License&quot;); you
+ may not use this file except in compliance with the License. You may
+ obtain a copy of the License at</p>
+<p> <a href="http://www.apache.org/licenses/LICENSE-2.0">
+http://www.apache.org/licenses/LICENSE-2.0</a></p>
+<p>Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ implied. See the License for the specific language governing
+ permissions and limitations under the License.</p>
+<HR NOSHADE>
+
+<!-- SECTION: Man Pages -->
+<h2 class="title"><a name="setup.types">setup.types(5)</a></h2>
+<h3 class="title"><a name="NAME">Name</a></h3>
+ setup.types - epm gui setup types file format.
+<h3 class="title"><a name="DESCRIPTION">Description</a></h3>
+ The EPM <a href="#setup"><b>setup</b>(1)</a> program normally presents
+ the user with a list of software products to install, which is called a
+ &quot;custom&quot; software installation.
+<p>If a file called<i> setup.types</i> is present in the package
+ directory, the user will instead be presented with a list of
+ installation types. Each type has an associated product list which
+ determines the products that are installed by default. If a type has no
+ products associated with it, then it is treated as a custom
+ installation and the user is presented with a list of packages to
+ choose from.</p>
+<h3 class="title"><a name="FILE_FORMAT">File Format</a></h3>
+ The<i> setup.types</i> file is an ASCII text file consisting of type
+ and product lines. Comments can be inserted by starting a line with the
+ pound sign (#). Each installation type is defined by a line starting
+ with the word TYPE. Products are defined by a line starting with the
+ word INSTALL:
+<pre class="man">
+
+    TYPE Typical End-User Configuration
+    INSTALL foo
+    INSTALL foo-help
+    TYPE Typical Developer Configuration
+    INSTALL foo
+    INSTALL foo-help
+    INSTALL foo-devel
+    INSTALL foo-examples
+    TYPE Custom Configuration
+</pre>
+<p>In the example above, three installation types are defined. Since the
+ last type includes no products, the user will be presented with the
+ full list of products to choose from.</p>
+<h3 class="title"><a name="SEE_ALSO">See Also</a></h3>
+ <a href="#epm"><b>epm</b>(1),</a> <a href="#setup"><b>setup</b>(1).</a>
 <h3 class="title"><a name="COPYRIGHT">Copyright</a></h3>
  Copyright &copy; 1999-2020 by Michael R Sweet, All Rights Reserved.
  Copyright &copy; 2020 by Jim Jagielski, All Rights Reserved.

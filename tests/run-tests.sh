@@ -129,7 +129,8 @@ fi
 
 # --- test_tar_size_bound ---------------------------------------------------
 if compile_test "$SCRATCH/test_tar_size_bound" "$ROOT/tests/unit/test_tar_size_bound.c" \
-    "$ROOT/tar.c"; then
+    "$ROOT/tar.c" "$ROOT/file.c" "$ROOT/run.c" "$ROOT/qprintf.c" "$ROOT/string.c" \
+    "$ROOT/snprintf.c"; then
     if "$SCRATCH/test_tar_size_bound" >"$SCRATCH/out.log" 2>&1; then
         pass "test_tar_size_bound (oversized tar entries rejected - finding #18)"
     else

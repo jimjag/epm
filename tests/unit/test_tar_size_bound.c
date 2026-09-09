@@ -16,9 +16,10 @@
 
 #include <stdio.h>
 
-/* tar.c references this extern global; provide it since we're not linking
- * epm.c in this test. */
+/* tar.c and file.c reference these extern globals; provide them since we're
+ * not linking epm.c in this test. */
 int Verbosity = 0;
+int AooMode = 0;
 
 static int failures = 0;
 

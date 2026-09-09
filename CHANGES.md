@@ -4,6 +4,19 @@ Changes in EPM
 Changes in EPM 5.0.1
 --------------------
 
+- File ownership (`user`/`group` in a list file entry) now falls back to a
+  literal numeric ID when no matching account exists on the build system,
+  instead of silently defaulting to root. Fixes Debian/Ubuntu builds where
+  the target uid/gid has no local passwd/group entry (issue #17); the same
+  fix applies to every backend that resolves ownership (deb, bsd, setld,
+  slackware, aix, macos, and the portable tar backend)
+- FreeBSD: `-f bsd`/`-f native` now build with `pkg(8)` via a generated UCL
+  manifest and packing list when `/usr/sbin/pkg` is present, since
+  `pkg_create(8)` no longer exists on current FreeBSD releases (issue #14).
+  Falls back to the legacy `pkg_create` invocation otherwise; OpenBSD and
+  NetBSD are unaffected. Pre-install and post-remove commands are not yet
+  supported through this path, matching the existing BSD-backend limitation
+  for those two phases
 - macOS: the `macos-signed` format can now apply Developer ID Application
   signing. Setting `EPM_APPLICATION_IDENTITY` signs the Mach-O files and
   `.app`/`.framework`/`.bundle` directories in the package payload with the

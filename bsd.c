@@ -39,6 +39,14 @@ static void cr2semicolon(char *command) {
 
 static int make_subpackage(const char *prodname, const char *directory,
                            const char *platname, dist_t *dist, const char *subpackage);
+static int copy_bsd_files(const char *directory, const char *prodfull, dist_t *dist,
+                          const char *subpackage);
+#ifdef __FreeBSD__
+static void write_ucl_string(FILE *fp, const char *s);
+static int make_freebsd_modern_pkg(const char *prodname, const char *directory,
+                                   const char *platname, dist_t *dist,
+                                   const char *subpackage, const char *prodfull);
+#endif /* __FreeBSD__ */
 
 /*
  * 'make_bsd()' - Make a Free/Net/OpenBSD software distribution package.
@@ -62,6 +70,369 @@ make_bsd(const char *prodname,     /* I - Product short name */
 
     return (0);
 }
+
+/*
+ * 'copy_bsd_files()' - Copy the distribution files into the buildroot.
+ */
+
+static int                             /* O - 0 = success, 1 = fail */
+copy_bsd_files(const char *directory,  /* I - Directory for distribution files */
+              const char *prodfull,   /* I - Full subpackage name */
+              dist_t *dist,           /* I - Distribution information */
+              const char *subpackage) /* I - Subpackage name */
+{
+    int i;                /* Looping var */
+    file_t *file;         /* Current distribution file */
+    char filename[1024];  /* Destination filename */
+    uid_t uid;             /* Resolved owner ID */
+    gid_t gid;             /* Resolved group ID */
+
+    if (Verbosity)
+        puts("Copying temporary distribution files...");
+
+    for (i = dist->num_files, file = dist->files; i > 0; i--, file++) {
+        if (file->subpackage != subpackage)
+            continue;
+
+        /*
+         * Find the username and groupname IDs...
+         */
+
+        uid = get_uid(file->user);
+        gid = get_gid(file->group);
+
+        /*
+         * Copy the file or make the directory or make the symlink as needed...
+         */
+
+        switch (tolower(file->type)) {
+        case 'c':
+        case 'f':
+            snprintf(filename, sizeof(filename), "%s/%s.buildroot%s", directory, prodfull,
+                     file->dst);
+
+            if (Verbosity > 1)
+                printf("%s -> %s...\n", file->src, filename);
+
+            if (copy_file(filename, file->src, file->mode, uid, gid))
+                return (1);
+            break;
+        case 'i':
+            snprintf(filename, sizeof(filename), "%s/%s.buildroot/usr/local/etc/rc.d/%s",
+                     directory, prodfull, file->dst);
+
+            if (Verbosity > 1)
+                printf("%s -> %s...\n", file->src, filename);
+
+            if (copy_file(filename, file->src, file->mode, uid, gid))
+                return (1);
+            break;
+        case 'd':
+            snprintf(filename, sizeof(filename), "%s/%s.buildroot%s", directory, prodfull,
+                     file->dst);
+
+            if (Verbosity > 1)
+                printf("Directory %s...\n", filename);
+
+            make_directory(filename, file->mode, uid, gid);
+            break;
+        case 'l':
+            snprintf(filename, sizeof(filename), "%s/%s.buildroot%s", directory, prodfull,
+                     file->dst);
+
+            if (Verbosity > 1)
+                printf("%s -> %s...\n", file->src, filename);
+
+            make_link(filename, file->src);
+            break;
+        }
+    }
+
+    return (0);
+}
+
+#ifdef __FreeBSD__
+/*
+ * 'write_ucl_string()' - Write a quoted, escaped UCL string value.
+ */
+
+static void write_ucl_string(FILE *fp,   /* I - Manifest file */
+                             const char *s) /* I - String to write */
+{
+    putc('"', fp);
+
+    for (; *s; s++) {
+        if (*s == '"' || *s == '\\')
+            putc('\\', fp);
+        if (*s == '\n')
+            fputs("\\n", fp);
+        else
+            putc(*s, fp);
+    }
+
+    putc('"', fp);
+}
+
+/*
+ * 'make_freebsd_modern_pkg()' - Build a package with pkg(8), for FreeBSD
+ *                                releases where pkg_create(8) no longer
+ *                                exists (issue #14).
+ *
+ * pkg(8) is driven by a UCL "+MANIFEST" plus a classic ports_makeplist(5)
+ * packing list (the same @cwd/@owner/@group/@mode/@dir/@exec/@unexec
+ * directives pkg_create used, per pkg's own ports_parse_plist() - see
+ * https://man.freebsd.org/cgi/man.cgi?query=pkg-create&sektion=8 and the
+ * FreeBSD Porter's Handbook plist chapter). Pre-install and post-remove
+ * commands are not embedded here (unlike @exec/@unexec for post-install/
+ * pre-remove, there's no confirmed equivalent for those two phases in this
+ * path) and are reported the same way the legacy BSD packager already
+ * reports them as unsupported.
+ */
+
+static int                                /* O - 0 = success, 1 = fail */
+make_freebsd_modern_pkg(const char *prodname,     /* I - Product short name */
+                        const char *directory,    /* I - Distribution directory */
+                        const char *platname,     /* I - Platform name */
+                        dist_t *dist,              /* I - Distribution information */
+                        const char *subpackage,    /* I - Subpackage name */
+                        const char *prodfull)       /* I - Full subpackage name */
+{
+    int i;                  /* Looping var */
+    FILE *fp;                /* Manifest/plist file */
+    char metadir[1024],      /* Metadata directory */
+        manifestname[1024],  /* +MANIFEST filename */
+        plistname[1024],     /* Packing list filename */
+        rootdir[1024];       /* Staged root directory */
+    char *old_user,          /* Old owner */
+        *old_group;          /* Old group */
+    int old_mode;            /* Old permissions */
+    file_t *file;             /* Current distribution file */
+    command_t *c;             /* Current command */
+    depend_t *d;               /* Current dependency */
+
+    REF(prodname);
+
+    if (Verbosity)
+        printf("Creating %s pkg(8) manifest...\n", prodfull);
+
+    snprintf(metadir, sizeof(metadir), "%s/%s.metadata", directory, prodfull);
+    make_directory(metadir, 0755, 0, 0);
+
+    snprintf(manifestname, sizeof(manifestname), "%s/+MANIFEST", metadir);
+
+    if ((fp = fopen(manifestname, "w")) == NULL) {
+        fprintf(stderr, "epm: Unable to create manifest file \"%s\": %s\n", manifestname,
+                strerror(errno));
+        return (1);
+    }
+
+    fputs("name: ", fp);
+    write_ucl_string(fp, prodfull);
+    fputs(";\n", fp);
+
+    fputs("version: ", fp);
+    if (dist->release[0]) {
+        char version[512];
+
+        snprintf(version, sizeof(version), "%s_%s", dist->version, dist->release);
+        write_ucl_string(fp, version);
+    } else
+        write_ucl_string(fp, dist->version);
+    fputs(";\n", fp);
+
+    fputs("origin: ", fp);
+    {
+        char origin[512];
+
+        snprintf(origin, sizeof(origin), "local/%s", prodfull);
+        write_ucl_string(fp, origin);
+    }
+    fputs(";\n", fp);
+
+    fputs("comment: ", fp);
+    write_ucl_string(fp, dist->product);
+    fputs(";\n", fp);
+
+    fputs("www: \"\";\n", fp);
+
+    fputs("maintainer: ", fp);
+    write_ucl_string(fp, dist->packager[0] ? dist->packager : dist->vendor);
+    fputs(";\n", fp);
+
+    fputs("prefix: \"/\";\n", fp);
+
+    if (platname[0]) {
+        fputs("arch: ", fp);
+        write_ucl_string(fp, platname);
+        fputs(";\n", fp);
+    }
+
+    fputs("desc: ", fp);
+    {
+        char desc[4096];
+
+        desc[0] = '\0';
+        for (i = 0; i < dist->num_descriptions; i++)
+            if (dist->descriptions[i].subpackage == subpackage) {
+                strlcat(desc, dist->descriptions[i].description, sizeof(desc));
+                strlcat(desc, "\n", sizeof(desc));
+            }
+        if (!desc[0])
+            strlcpy(desc, dist->product, sizeof(desc));
+        write_ucl_string(fp, desc);
+    }
+    fputs(";\n", fp);
+
+    for (i = dist->num_depends, d = dist->depends; i > 0; i--, d++)
+        if (d->type == DEPEND_INCOMPAT && d->subpackage == subpackage) {
+            fputs("epm: NOTE - dependency incompatibilities/conflicts are not "
+                  "currently\n"
+                  "     expressed in the pkg(8) manifest for FreeBSD; ignoring "
+                  "requirement\n",
+                  stderr);
+            break;
+        }
+
+    {
+        int wrote_deps = 0;
+
+        for (i = dist->num_depends, d = dist->depends; i > 0; i--, d++) {
+            if (d->type != DEPEND_REQUIRES || d->subpackage != subpackage)
+                continue;
+
+            if (!wrote_deps) {
+                fputs("deps: {\n", fp);
+                wrote_deps = 1;
+            }
+
+            fputs("  ", fp);
+            write_ucl_string(fp, d->product);
+            fputs(": {origin: ", fp);
+            {
+                char deporigin[512];
+
+                snprintf(deporigin, sizeof(deporigin), "local/%s", d->product);
+                write_ucl_string(fp, deporigin);
+            }
+            if (d->vernumber[0] > 0) {
+                fputs(", version: ", fp);
+                write_ucl_string(fp, d->version[0]);
+            }
+            fputs("};\n", fp);
+        }
+
+        if (wrote_deps)
+            fputs("};\n", fp);
+    }
+
+    fclose(fp);
+
+    /*
+     * Write the packing list...
+     */
+
+    snprintf(plistname, sizeof(plistname), "%s/plist", metadir);
+
+    if ((fp = fopen(plistname, "w")) == NULL) {
+        fprintf(stderr, "epm: Unable to create plist file \"%s\": %s\n", plistname,
+                strerror(errno));
+        return (1);
+    }
+
+    fputs("@cwd /\n", fp);
+
+    for (i = dist->num_commands, c = dist->commands; i > 0; i--, c++)
+        if (c->subpackage == subpackage)
+            switch (c->type) {
+            case COMMAND_PRE_INSTALL:
+                fputs("epm: WARNING - Package contains pre-install commands which are "
+                      "not\n"
+                      "     supported by the BSD packager.\n",
+                      stderr);
+                break;
+            case COMMAND_POST_INSTALL:
+                if (AooMode)
+                    cr2semicolon(c->command);
+                fprintf(fp, "@exec %s\n", c->command);
+                break;
+            case COMMAND_PRE_REMOVE:
+                if (AooMode)
+                    cr2semicolon(c->command);
+                fprintf(fp, "@unexec %s\n", c->command);
+                break;
+            case COMMAND_POST_REMOVE:
+                fputs("epm: WARNING - Package contains post-removal commands which are "
+                      "not\n"
+                      "     supported by the BSD packager.\n",
+                      stderr);
+                break;
+            }
+
+    for (i = dist->num_files, file = dist->files, old_mode = 0, old_user = "",
+        old_group = "";
+         i > 0; i--, file++) {
+        if (tolower(file->type) == 'd' || file->subpackage != subpackage)
+            continue;
+
+        if (file->mode != old_mode)
+            fprintf(fp, "@mode %04o\n", old_mode = file->mode);
+        if (strcmp(file->user, old_user))
+            fprintf(fp, "@owner %s\n", old_user = file->user);
+        if (strcmp(file->group, old_group))
+            fprintf(fp, "@group %s\n", old_group = file->group);
+
+        switch (tolower(file->type)) {
+        case 'i':
+            qprintf(fp, "usr/local/etc/rc.d/%s\n", file->dst);
+            break;
+        case 'c':
+        case 'f':
+        case 'l':
+            qprintf(fp, "%s\n", file->dst + 1);
+            break;
+        }
+    }
+
+    for (i = dist->num_files, file = dist->files; i > 0; i--, file++)
+        if (tolower(file->type) == 'd' && file->subpackage == subpackage)
+            qprintf(fp, "@dir %s\n", file->dst + 1);
+
+    fclose(fp);
+
+    if (copy_bsd_files(directory, prodfull, dist, subpackage))
+        return (1);
+
+    /*
+     * Build the distribution...
+     */
+
+    if (Verbosity)
+        printf("Building %s pkg(8) binary distribution...\n", prodfull);
+
+    snprintf(rootdir, sizeof(rootdir), "%s/%s.buildroot", directory, prodfull);
+
+    if (run_command(NULL,
+                    "/usr/sbin/pkg create -m %s -p %s -r %s -o %s -f txz",
+                    metadir, plistname, rootdir, directory))
+        return (1);
+
+    /*
+     * Remove temporary files...
+     */
+
+    if (!KeepFiles) {
+        if (Verbosity)
+            puts("Removing temporary distribution files...");
+
+        unlink_directory(rootdir);
+        unlink(manifestname);
+        unlink(plistname);
+        unlink_directory(metadir);
+    }
+
+    return (0);
+}
+#endif /* __FreeBSD__ */
 
 /*
  * 'make_subpackage()' - Create a subpackage...
@@ -88,8 +459,6 @@ make_subpackage(const char *prodname,   /* I - Product short name */
     file_t *file;           /* Current distribution file */
     command_t *c;           /* Current command */
     depend_t *d;            /* Current dependency */
-    struct passwd *pwd;     /* Pointer to user record */
-    struct group *grp;      /* Pointer to group record */
     char current[1024];     /* Current directory */
 
     getcwd(current, sizeof(current));
@@ -113,6 +482,18 @@ make_subpackage(const char *prodname,   /* I - Product short name */
         snprintf(name, sizeof(name), "%s-%s-%s", prodfull, dist->version, platname);
     else
         snprintf(name, sizeof(name), "%s-%s", prodfull, dist->version);
+
+#ifdef __FreeBSD__
+    /*
+     * pkg_create(8) was removed from FreeBSD years ago in favor of pkg(8);
+     * detect which is actually present and use the UCL-manifest packager
+     * when the legacy tool is gone (issue #14)...
+     */
+
+    if (!access("/usr/sbin/pkg", X_OK))
+        return (make_freebsd_modern_pkg(prodname, directory, platname, dist, subpackage,
+                                        prodfull));
+#endif /* __FreeBSD__ */
 
     /*
      * Write the descr file for pkg...
@@ -319,76 +700,8 @@ make_subpackage(const char *prodname,   /* I - Product short name */
 
     fclose(fp);
 
-    /*
-     * Copy the files over...
-     */
-
-    if (Verbosity)
-        puts("Copying temporary distribution files...");
-
-    for (i = dist->num_files, file = dist->files; i > 0; i--, file++) {
-        if (file->subpackage != subpackage)
-            continue;
-
-        /*
-         * Find the username and groupname IDs...
-         */
-
-        pwd = getpwnam(file->user);
-        grp = getgrnam(file->group);
-
-        endpwent();
-        endgrent();
-
-        /*
-         * Copy the file or make the directory or make the symlink as needed...
-         */
-
-        switch (tolower(file->type)) {
-        case 'c':
-        case 'f':
-            snprintf(filename, sizeof(filename), "%s/%s.buildroot%s", directory, prodfull,
-                     file->dst);
-
-            if (Verbosity > 1)
-                printf("%s -> %s...\n", file->src, filename);
-
-            if (copy_file(filename, file->src, file->mode, pwd ? pwd->pw_uid : 0,
-                          grp ? grp->gr_gid : 0))
-                return (1);
-            break;
-        case 'i':
-            snprintf(filename, sizeof(filename), "%s/%s.buildroot/usr/local/etc/rc.d/%s",
-                     directory, prodfull, file->dst);
-
-            if (Verbosity > 1)
-                printf("%s -> %s...\n", file->src, filename);
-
-            if (copy_file(filename, file->src, file->mode, pwd ? pwd->pw_uid : 0,
-                          grp ? grp->gr_gid : 0))
-                return (1);
-            break;
-        case 'd':
-            snprintf(filename, sizeof(filename), "%s/%s.buildroot%s", directory, prodfull,
-                     file->dst);
-
-            if (Verbosity > 1)
-                printf("Directory %s...\n", filename);
-
-            make_directory(filename, file->mode, pwd ? pwd->pw_uid : 0,
-                           grp ? grp->gr_gid : 0);
-            break;
-        case 'l':
-            snprintf(filename, sizeof(filename), "%s/%s.buildroot%s", directory, prodfull,
-                     file->dst);
-
-            if (Verbosity > 1)
-                printf("%s -> %s...\n", file->src, filename);
-
-            make_link(filename, file->src);
-            break;
-        }
-    }
+    if (copy_bsd_files(directory, prodfull, dist, subpackage))
+        return (1);
 
     /*
      * Build the distribution...

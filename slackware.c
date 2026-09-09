@@ -87,8 +87,8 @@ make_subpackage(const char *prodname,   /* I - Product short name */
         pkgname[1024];       /* Package filename */
     file_t *file;            /* Current distribution file */
     command_t *c;            /* Current command */
-    struct passwd *pwd;      /* Pointer to user record */
-    struct group *grp;       /* Pointer to group record */
+    uid_t uid;                /* Resolved owner ID */
+    gid_t gid;                /* Resolved group ID */
     struct utsname platform; /* Original platform data */
 
     /*
@@ -135,11 +135,8 @@ make_subpackage(const char *prodname,   /* I - Product short name */
          * Find the user and group IDs...
          */
 
-        pwd = getpwnam(file->user);
-        grp = getgrnam(file->group);
-
-        endpwent();
-        endgrent();
+        uid = get_uid(file->user);
+        gid = get_gid(file->group);
 
         /*
          * Copy the file, make the directory, or make the symlink as needed...
@@ -154,8 +151,7 @@ make_subpackage(const char *prodname,   /* I - Product short name */
             if (Verbosity > 1)
                 printf("F %s -> %s...\n", file->src, filename);
 
-            if (copy_file(filename, file->src, file->mode, pwd ? pwd->pw_uid : 0,
-                          grp ? grp->gr_gid : 0))
+            if (copy_file(filename, file->src, file->mode, uid, gid))
                 return (1);
             break;
 
@@ -166,8 +162,7 @@ make_subpackage(const char *prodname,   /* I - Product short name */
             if (Verbosity > 1)
                 printf("I %s -> %s...\n", file->src, filename);
 
-            if (copy_file(filename, file->src, file->mode, pwd ? pwd->pw_uid : 0,
-                          grp ? grp->gr_gid : 0))
+            if (copy_file(filename, file->src, file->mode, uid, gid))
                 return (1);
             break;
 
@@ -178,8 +173,7 @@ make_subpackage(const char *prodname,   /* I - Product short name */
             if (Verbosity > 1)
                 printf("D %s...\n", filename);
 
-            make_directory(filename, file->mode, pwd ? pwd->pw_uid : 0,
-                           grp ? grp->gr_gid : 0);
+            make_directory(filename, file->mode, uid, gid);
             break;
 
         case 'l':

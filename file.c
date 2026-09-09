@@ -25,6 +25,67 @@
 #include "epm.h"
 
 /*
+ * 'get_uid()' - Resolve a list-file owner to a numeric UID.
+ *
+ * Tries a user name lookup first; if that fails and the name is purely
+ * numeric, it is used as a literal UID so file entries can specify an
+ * owner that has no passwd entry on the build system.  Falls back to 0
+ * (root) if neither resolves, matching prior behavior.
+ */
+
+uid_t                    /* O - Resolved user ID */
+get_uid(const char *name) /* I - User name or numeric UID string */
+{
+    struct passwd *pwd; /* Pointer to user record */
+    char *end;          /* End of numeric conversion */
+    long uid;           /* Converted UID */
+
+    if (name && *name) {
+        if ((pwd = getpwnam(name)) != NULL) {
+            endpwent();
+            return (pwd->pw_uid);
+        }
+
+        endpwent();
+
+        uid = strtol(name, &end, 10);
+        if (end != name && *end == '\0' && uid >= 0)
+            return ((uid_t)uid);
+    }
+
+    return (0);
+}
+
+/*
+ * 'get_gid()' - Resolve a list-file group to a numeric GID.
+ *
+ * Same fallback behavior as get_uid() for group names/numeric GIDs.
+ */
+
+gid_t                     /* O - Resolved group ID */
+get_gid(const char *name) /* I - Group name or numeric GID string */
+{
+    struct group *grp; /* Pointer to group record */
+    char *end;         /* End of numeric conversion */
+    long gid;          /* Converted GID */
+
+    if (name && *name) {
+        if ((grp = getgrnam(name)) != NULL) {
+            endgrent();
+            return (grp->gr_gid);
+        }
+
+        endgrent();
+
+        gid = strtol(name, &end, 10);
+        if (end != name && *end == '\0' && gid >= 0)
+            return ((gid_t)gid);
+    }
+
+    return (0);
+}
+
+/*
  * 'copy_file()' - Copy a file.
  */
 

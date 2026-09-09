@@ -299,18 +299,15 @@ tar_header(tarf_t *fp,           /* I - Tar file to write to */
     int i,                 /* Looping var... */
         sum;               /* Checksum */
     unsigned char *sumptr; /* Pointer into header record */
-    struct passwd *pwd;    /* Pointer to user record */
-    struct group *grp;     /* Pointer to group record */
+    uid_t uid;              /* Resolved owner ID */
+    gid_t gid;              /* Resolved group ID */
 
     /*
      * Find the username and groupname IDs...
      */
 
-    pwd = getpwnam(user);
-    grp = getgrnam(group);
-
-    endpwent();
-    endgrent();
+    uid = get_uid(user);
+    gid = get_gid(group);
 
     /*
      * Format the header...
@@ -387,10 +384,8 @@ tar_header(tarf_t *fp,           /* I - Tar file to write to */
     }
 
     snprintf(record.header.mode, sizeof(record.header.mode), "%-6o ", (unsigned)mode);
-    snprintf(record.header.uid, sizeof(record.header.uid), "%o ",
-             pwd == NULL ? 0 : (unsigned)pwd->pw_uid);
-    snprintf(record.header.gid, sizeof(record.header.gid), "%o ",
-             grp == NULL ? 0 : (unsigned)grp->gr_gid);
+    snprintf(record.header.uid, sizeof(record.header.uid), "%o ", (unsigned)uid);
+    snprintf(record.header.gid, sizeof(record.header.gid), "%o ", (unsigned)gid);
     snprintf(record.header.size, sizeof(record.header.size), "%011llo",
              (unsigned long long)size);
     snprintf(record.header.mtime, sizeof(record.header.mtime), "%011o", (unsigned)mtime);

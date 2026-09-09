@@ -233,8 +233,8 @@ make_subpackage(const char *prodname,     /* I - Product short name */
     command_t *c;                  /* Current command */
     depend_t *d;                   /* Current dependency */
     file_t *file;                  /* Current distribution file */
-    struct passwd *pwd;            /* Pointer to user record */
-    struct group *grp;             /* Pointer to group record */
+    uid_t uid;                     /* Resolved owner ID */
+    gid_t gid;                     /* Resolved group ID */
     static const char *depends[] = /* Dependency names */
         {"Depends:", "Conflicts:", "Replaces:", "Provides:"};
     char *sep;
@@ -665,11 +665,8 @@ make_subpackage(const char *prodname,     /* I - Product short name */
          * Find the username and groupname IDs...
          */
 
-        pwd = getpwnam(file->user);
-        grp = getgrnam(file->group);
-
-        endpwent();
-        endgrent();
+        uid = get_uid(file->user);
+        gid = get_gid(file->group);
 
         /*
          * Copy the file or make the directory or make the symlink as needed...
@@ -683,8 +680,7 @@ make_subpackage(const char *prodname,     /* I - Product short name */
             if (Verbosity > 1)
                 printf("%s -> %s...\n", file->src, filename);
 
-            if (copy_file(filename, file->src, file->mode, pwd ? pwd->pw_uid : 0,
-                          grp ? grp->gr_gid : 0))
+            if (copy_file(filename, file->src, file->mode, uid, gid))
                 return (1);
             break;
         case 'i':
@@ -694,8 +690,7 @@ make_subpackage(const char *prodname,     /* I - Product short name */
             if (Verbosity > 1)
                 printf("%s -> %s...\n", file->src, filename);
 
-            if (copy_file(filename, file->src, file->mode, pwd ? pwd->pw_uid : 0,
-                          grp ? grp->gr_gid : 0))
+            if (copy_file(filename, file->src, file->mode, uid, gid))
                 return (1);
             break;
         case 'd':
@@ -704,8 +699,7 @@ make_subpackage(const char *prodname,     /* I - Product short name */
             if (Verbosity > 1)
                 printf("Directory %s...\n", filename);
 
-            make_directory(filename, file->mode, pwd ? pwd->pw_uid : 0,
-                           grp ? grp->gr_gid : 0);
+            make_directory(filename, file->mode, uid, gid);
             break;
         case 'l':
             snprintf(filename, sizeof(filename), "%s/%s%s", directory, name, file->dst);

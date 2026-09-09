@@ -257,6 +257,8 @@ extern char *find_subpackage(dist_t *dist, const char *subpkg);
 extern void free_dist(dist_t *dist);
 extern const char *get_option(file_t *file, const char *name, const char *defval);
 extern void get_platform(struct utsname *platform);
+extern uid_t get_uid(const char *name);
+extern gid_t get_gid(const char *name);
 extern const char *get_runlevels(file_t *file, const char *deflevels);
 extern int get_start(file_t *file, int defstart);
 extern int get_stop(file_t *file, int defstop);

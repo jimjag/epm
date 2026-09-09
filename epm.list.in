@@ -1,7 +1,7 @@
 #
 # Sample software list file for the ESP Package Manager (EPM).
 #
-# Copyright © 2020 by Jim Jagielski
+# Copyright © 2020-2026 by Jim Jagielski
 # Copyright © 1999-2020 by Michael R Sweet
 # Copyright © 1999-2007 by Easy Software Products, all rights reserved.
 #
@@ -30,7 +30,7 @@ $srcdir=@srcdir@
 
 # Product information
 %product ESP Package Manager (EPM)
-%copyright 2020 by Jim Jagielski, All Rights Reserved.
+%copyright 2020-2026 by Jim Jagielski, All Rights Reserved.
 %copyright 1999-2020 by Michael R Sweet, All Rights Reserved.
 %vendor Michael R Sweet, Jim Jagielski
 %license ${srcdir}/LICENSE

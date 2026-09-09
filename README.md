@@ -75,7 +75,7 @@ Legal Stuff
 -----------
 
 EPM is Copyright © 1999-2020 by Michael R Sweet. All rights reserved.
-EPM is Copyright © 2020 by Jim Jagielski. All rights reserved.
+EPM is Copyright © 2020-2026 by Jim Jagielski. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

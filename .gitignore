@@ -5,6 +5,7 @@
 /.project
 /.cproject
 /.idea
+/.settings
 
 # Targets build by the configure phase
 /Makefile

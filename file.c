@@ -25,20 +25,36 @@
 #include "epm.h"
 
 /*
+ * A numeric id is usable only if it survives the round trip into the target
+ * type and is not the (type)-1 sentinel that chown(2) reads as "leave this
+ * ID unchanged".  Written as a round trip rather than a "< (type)-1" bound
+ * because uid_t and gid_t are not guaranteed to be unsigned - where they are
+ * signed, (unsigned long)(uid_t)-1 is ULONG_MAX and such a bound admits
+ * every value, including the sentinel it exists to reject.
+ */
+
+#define ID_IS_USABLE(type, val)                                                         \
+    ((type)(val) != (type)-1 && (unsigned long)(type)(val) == (val))
+
+/*
  * 'get_uid()' - Resolve a list-file owner to a numeric UID.
  *
  * Tries a user name lookup first; if that fails and the name is purely
  * numeric, it is used as a literal UID so file entries can specify an
  * owner that has no passwd entry on the build system.  Falls back to 0
  * (root) if neither resolves, matching prior behavior.
+ *
+ * A value of (uid_t)-1 is rejected rather than returned: chown(2) treats
+ * that value as "leave this ID unchanged", so returning it here would
+ * silently defeat the whole point of resolving an owner at all.
  */
 
 uid_t                    /* O - Resolved user ID */
 get_uid(const char *name) /* I - User name or numeric UID string */
 {
-    struct passwd *pwd; /* Pointer to user record */
-    char *end;          /* End of numeric conversion */
-    long uid;           /* Converted UID */
+    struct passwd *pwd;  /* Pointer to user record */
+    char *end;           /* End of numeric conversion */
+    unsigned long uid;   /* Converted UID */
 
     if (name && *name) {
         if ((pwd = getpwnam(name)) != NULL) {
@@ -48,9 +64,14 @@ get_uid(const char *name) /* I - User name or numeric UID string */
 
         endpwent();
 
-        uid = strtol(name, &end, 10);
-        if (end != name && *end == '\0' && uid >= 0)
-            return ((uid_t)uid);
+        if (isdigit(name[0] & 255)) {
+            errno = 0;
+            uid = strtoul(name, &end, 10);
+
+            if (end != name && *end == '\0' && errno != ERANGE &&
+                ID_IS_USABLE(uid_t, uid))
+                return ((uid_t)uid);
+        }
     }
 
     return (0);
@@ -59,15 +80,16 @@ get_uid(const char *name) /* I - User name or numeric UID string */
 /*
  * 'get_gid()' - Resolve a list-file group to a numeric GID.
  *
- * Same fallback behavior as get_uid() for group names/numeric GIDs.
+ * Same fallback behavior as get_uid() for group names/numeric GIDs,
+ * including rejecting a value that would resolve to (gid_t)-1.
  */
 
 gid_t                     /* O - Resolved group ID */
 get_gid(const char *name) /* I - Group name or numeric GID string */
 {
-    struct group *grp; /* Pointer to group record */
-    char *end;         /* End of numeric conversion */
-    long gid;          /* Converted GID */
+    struct group *grp;  /* Pointer to group record */
+    char *end;          /* End of numeric conversion */
+    unsigned long gid;  /* Converted GID */
 
     if (name && *name) {
         if ((grp = getgrnam(name)) != NULL) {
@@ -77,9 +99,14 @@ get_gid(const char *name) /* I - Group name or numeric GID string */
 
         endgrent();
 
-        gid = strtol(name, &end, 10);
-        if (end != name && *end == '\0' && gid >= 0)
-            return ((gid_t)gid);
+        if (isdigit(name[0] & 255)) {
+            errno = 0;
+            gid = strtoul(name, &end, 10);
+
+            if (end != name && *end == '\0' && errno != ERANGE &&
+                ID_IS_USABLE(gid_t, gid))
+                return ((gid_t)gid);
+        }
     }
 
     return (0);

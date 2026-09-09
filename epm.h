@@ -299,6 +299,8 @@ extern int run_command(const char *directory, const char *command, ...)
     __attribute__((__format__(__printf__, 2, 3)))
 #endif /* __GNUC__ */
     ;
+extern int run_quote(char *dst, size_t dstsize, const char *src);
+extern int split_args(char *argbuf, char **argv, int maxargs);
 extern void sort_dist_files(dist_t *dist);
 extern void strip_execs(dist_t *dist);
 extern int tar_close(tarf_t *tar);

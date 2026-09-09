@@ -42,7 +42,7 @@ static int notarize_file(const char *path, const char *profile);
 static int sign_payload(const char *directory, const char *prodfull, dist_t *dist,
                         const char *identity, const char *entitlements);
 static void staged_path(char *buf, size_t bufsize, const char *directory,
-                        const char *prodfull, const char *dst);
+                        const char *prodfull, const char *dst, int isdir);
 
 /*
  * 'make_macos()' - Make a macOS disk image containing a macOS package.
@@ -96,10 +96,24 @@ make_macos(int format,               /* I - Format */
 
     snprintf(dmgname, sizeof(dmgname), "%s/%s.dmg", directory, filename);
 
-    if (run_command(NULL, "hdiutil create -ov -srcfolder %s/%s.pkg %s", directory,
-                    prodname, dmgname)) {
-        fputs("epm: Unable to create disk image.\n", stderr);
-        return (1);
+    {
+        char srcfolder[1024],  /* Package directory to image */
+            qsrcfolder[1024],  /* Quoted package directory */
+            qdmgname[1024];    /* Quoted disk image filename */
+
+        snprintf(srcfolder, sizeof(srcfolder), "%s/%s.pkg", directory, prodname);
+
+        if (run_quote(qsrcfolder, sizeof(qsrcfolder), srcfolder) ||
+            run_quote(qdmgname, sizeof(qdmgname), dmgname)) {
+            fputs("epm: A disk image path is too long to quote safely.\n", stderr);
+            return (1);
+        }
+
+        if (run_command(NULL, "hdiutil create -ov -srcfolder %s %s", qsrcfolder,
+                        qdmgname)) {
+            fputs("epm: Unable to create disk image.\n", stderr);
+            return (1);
+        }
     }
 
     /*
@@ -248,7 +262,7 @@ static int make_package(int format,            /* I - Format */
         switch (tolower(file->type)) {
         case 'c':
         case 'f':
-            staged_path(filename, sizeof(filename), directory, prodfull, file->dst);
+            staged_path(filename, sizeof(filename), directory, prodfull, file->dst, 0);
 
             if (Verbosity > 1)
                 printf("%s -> %s...\n", file->src, filename);
@@ -318,7 +332,7 @@ static int make_package(int format,            /* I - Format */
             fclose(fp);
             break;
         case 'd':
-            staged_path(filename, sizeof(filename), directory, prodfull, file->dst);
+            staged_path(filename, sizeof(filename), directory, prodfull, file->dst, 1);
 
             if (Verbosity > 1)
                 printf("Directory %s...\n", filename);
@@ -326,7 +340,7 @@ static int make_package(int format,            /* I - Format */
             make_directory(filename, file->mode, uid, gid);
             break;
         case 'l':
-            staged_path(filename, sizeof(filename), directory, prodfull, file->dst);
+            staged_path(filename, sizeof(filename), directory, prodfull, file->dst, 0);
 
             if (Verbosity > 1)
                 printf("%s -> %s...\n", file->src, filename);
@@ -366,31 +380,57 @@ static int make_package(int format,            /* I - Format */
 
     snprintf(pkgname, sizeof(pkgname), "%s/%s.pkg", filename, prodfull);
 
-    if (format == PACKAGE_MACOS_SIGNED) {
-        const char *identity = getenv("EPM_SIGNING_IDENTITY");
-        if (!identity) {
-            fputs("epm: Using default 'Developer ID Installer' signing identity.\n"
-                  "     Set the EPM_SIGNING_IDENTITY environment variable to override.\n",
-                  stderr);
-            identity = "Developer ID Installer";
-        }
+    {
+        char scriptsdir[1024],  /* Resources directory */
+            rootdir[1024],      /* Staged payload directory */
+            qidentifier[1024],  /* Quoted package identifier */
+            qversion[1024],     /* Quoted version */
+            qscriptsdir[1024],  /* Quoted resources directory */
+            qrootdir[1024],     /* Quoted payload directory */
+            qpkgname[1024];     /* Quoted package filename */
 
-        if (run_command(
-                NULL,
-                "/usr/bin/pkgbuild --identifier %s --version %s --ownership preserve "
-                "--scripts %s/%s/Resources --root %s/%s/Package --sign '%s' %s",
-                prodfull, dist->version, directory, prodfull, directory, prodfull,
-                identity, pkgname)) {
-            fputs("epm: Unable to build signed package.\n", stderr);
+        snprintf(scriptsdir, sizeof(scriptsdir), "%s/%s/Resources", directory, prodfull);
+        snprintf(rootdir, sizeof(rootdir), "%s/%s/Package", directory, prodfull);
+
+        if (run_quote(qidentifier, sizeof(qidentifier), prodfull) ||
+            run_quote(qversion, sizeof(qversion), dist->version) ||
+            run_quote(qscriptsdir, sizeof(qscriptsdir), scriptsdir) ||
+            run_quote(qrootdir, sizeof(qrootdir), rootdir) ||
+            run_quote(qpkgname, sizeof(qpkgname), pkgname)) {
+            fputs("epm: A package path is too long to quote safely.\n", stderr);
             return (1);
         }
-    } else {
-        if (run_command(
-                NULL,
-                "/usr/bin/pkgbuild --identifier %s --version %s --ownership preserve "
-                "--scripts %s/%s/Resources --root %s/%s/Package %s",
-                prodfull, dist->version, directory, prodfull, directory, prodfull,
-                pkgname)) {
+
+        if (format == PACKAGE_MACOS_SIGNED) {
+            const char *identity = getenv("EPM_SIGNING_IDENTITY");
+            char qidentity[1024]; /* Quoted identity */
+
+            if (!identity) {
+                fputs("epm: Using default 'Developer ID Installer' signing identity.\n"
+                      "     Set the EPM_SIGNING_IDENTITY environment variable to "
+                      "override.\n",
+                      stderr);
+                identity = "Developer ID Installer";
+            }
+
+            if (run_quote(qidentity, sizeof(qidentity), identity)) {
+                fputs("epm: EPM_SIGNING_IDENTITY is too long.\n", stderr);
+                return (1);
+            }
+
+            if (run_command(
+                    NULL,
+                    "/usr/bin/pkgbuild --identifier %s --version %s --ownership preserve "
+                    "--scripts %s --root %s --sign %s %s",
+                    qidentifier, qversion, qscriptsdir, qrootdir, qidentity, qpkgname)) {
+                fputs("epm: Unable to build signed package.\n", stderr);
+                return (1);
+            }
+        } else if (run_command(
+                       NULL,
+                       "/usr/bin/pkgbuild --identifier %s --version %s --ownership "
+                       "preserve --scripts %s --root %s %s",
+                       qidentifier, qversion, qscriptsdir, qrootdir, qpkgname)) {
             fputs("epm: Unable to build package.\n", stderr);
             return (1);
         }
@@ -426,10 +466,11 @@ static void staged_path(char *buf,             /* O - Staged path buffer */
                         size_t bufsize,        /* I - Size of buffer */
                         const char *directory, /* I - Distribution directory */
                         const char *prodfull,  /* I - Full product name */
-                        const char *dst)       /* I - Destination path */
+                        const char *dst,       /* I - Destination path */
+                        int isdir)             /* I - Is dst a directory entry? */
 {
     if (!strncmp(dst, "/etc/", 5) || !strncmp(dst, "/var/", 5) ||
-        !strcmp(dst, "/etc") || !strcmp(dst, "/var"))
+        (isdir && (!strcmp(dst, "/etc") || !strcmp(dst, "/var"))))
         snprintf(buf, bufsize, "%s/%s/Package/private%s", directory, prodfull, dst);
     else
         snprintf(buf, bufsize, "%s/%s/Package%s", directory, prodfull, dst);
@@ -443,8 +484,9 @@ static int                       /* O - 1 if Mach-O, 0 otherwise */
 is_macho(const char *path)       /* I - File to check */
 {
     FILE *fp;                    /* File pointer */
-    unsigned char header[4];     /* Magic number */
-    unsigned magic;              /* Magic number as a big-endian value */
+    unsigned char header[8];     /* Magic number + fat_header.nfat_arch */
+    unsigned magic,               /* Magic number as a big-endian value */
+        nfat;                     /* Fat header architecture count */
 
     if ((fp = fopen(path, "rb")) == NULL)
         return (0);
@@ -459,10 +501,32 @@ is_macho(const char *path)       /* I - File to check */
     magic = ((unsigned)header[0] << 24) | ((unsigned)header[1] << 16) |
             ((unsigned)header[2] << 8) | (unsigned)header[3];
 
-    return (magic == 0xfeedfaceu || magic == 0xcefaedfeu || /* 32-bit */
-            magic == 0xfeedfacfu || magic == 0xcffaedfeu || /* 64-bit */
-            magic == 0xcafebabeu || magic == 0xbebafecau || /* universal */
-            magic == 0xcafebabfu || magic == 0xbfbafecau);  /* universal 64-bit */
+    if (magic == 0xfeedfaceu || magic == 0xcefaedfeu || /* 32-bit */
+        magic == 0xfeedfacfu || magic == 0xcffaedfeu)   /* 64-bit */
+        return (1);
+
+    if (magic == 0xcafebabeu || magic == 0xbebafecau || /* universal */
+        magic == 0xcafebabfu || magic == 0xbfbafecau) {  /* universal 64-bit */
+        /*
+         * 0xCAFEBABE is also the Java .class file magic.  A fat Mach-O's
+         * next 4 bytes are always its architecture count, which in practice
+         * is a small number (1-10ish); a .class file's next 4 bytes are its
+         * minor/major version, and major version has never been below 45 -
+         * use that gap to tell the two apart.  The 0xBEBAFECA spellings are
+         * the same header byte-swapped, so nfat_arch is swapped there too.
+         */
+
+        if (magic == 0xcafebabeu || magic == 0xcafebabfu)
+            nfat = ((unsigned)header[4] << 24) | ((unsigned)header[5] << 16) |
+                   ((unsigned)header[6] << 8) | (unsigned)header[7];
+        else
+            nfat = ((unsigned)header[7] << 24) | ((unsigned)header[6] << 16) |
+                   ((unsigned)header[5] << 8) | (unsigned)header[4];
+
+        return (nfat > 0 && nfat <= 20);
+    }
+
+    return (0);
 }
 
 /*
@@ -589,24 +653,40 @@ codesign_path(const char *path,        /* I - File or bundle to sign */
               const char *entitlements,/* I - Entitlements plist or NULL */
               int runtime)             /* I - Enable the hardened runtime? */
 {
-    char options[1024]; /* Additional codesign options */
+    char options[1024],     /* Additional codesign options */
+        qpath[1024],         /* Quoted path */
+        qidentity[1024],     /* Quoted identity */
+        qentitlements[1024]; /* Quoted entitlements path */
+
+    if (run_quote(qpath, sizeof(qpath), path) ||
+        run_quote(qidentity, sizeof(qidentity), identity)) {
+        fprintf(stderr, "epm: Unable to sign \"%s\" - path or identity too long.\n", path);
+        return (1);
+    }
 
     options[0] = '\0';
 
-    if (runtime)
-        strlcat(options, "--options runtime ", sizeof(options));
+    if (runtime && strlcat(options, "--options runtime ", sizeof(options)) >= sizeof(options)) {
+        fprintf(stderr, "epm: Unable to sign \"%s\" - options too long.\n", path);
+        return (1);
+    }
 
     if (entitlements) {
-        strlcat(options, "--entitlements '", sizeof(options));
-        strlcat(options, entitlements, sizeof(options));
-        strlcat(options, "' ", sizeof(options));
+        if (run_quote(qentitlements, sizeof(qentitlements), entitlements) ||
+            strlcat(options, "--entitlements ", sizeof(options)) >= sizeof(options) ||
+            strlcat(options, qentitlements, sizeof(options)) >= sizeof(options) ||
+            strlcat(options, " ", sizeof(options)) >= sizeof(options)) {
+            fprintf(stderr,
+                    "epm: Unable to sign \"%s\" - entitlements path too long.\n", path);
+            return (1);
+        }
     }
 
     if (Verbosity > 1)
         printf("Signing %s...\n", path);
 
-    if (run_command(NULL, "/usr/bin/codesign --force --timestamp %s--sign '%s' '%s'",
-                    options, identity, path)) {
+    if (run_command(NULL, "/usr/bin/codesign --force --timestamp %s--sign %s %s", options,
+                    qidentity, qpath)) {
         fprintf(stderr, "epm: Unable to sign \"%s\".\n", path);
         return (1);
     }
@@ -632,8 +712,8 @@ sign_payload(const char *directory,     /* I - Distribution directory */
         **binaries = NULL;     /* Standalone Mach-O files to sign */
     int nbundles = 0,          /* Number of bundles */
         nbinaries = 0;         /* Number of binaries */
-    char path[1024],           /* Staged path */
-        dstprefix[512];        /* Destination path of a bundle */
+    char path[1024],                 /* Staged path */
+        dstprefix[sizeof(file->dst)]; /* Destination path of a bundle */
     const char *p,             /* Pointer into destination path */
         *start;                /* Start of the current path component */
     size_t len;                /* Length of a destination path prefix */
@@ -665,13 +745,10 @@ sign_payload(const char *directory,     /* I - Distribution directory */
 
             len = (size_t)(p + 1 - file->dst);
 
-            if (len >= sizeof(dstprefix))
-                continue;
-
             memcpy(dstprefix, file->dst, len);
             dstprefix[len] = '\0';
 
-            staged_path(path, sizeof(path), directory, prodfull, dstprefix);
+            staged_path(path, sizeof(path), directory, prodfull, dstprefix, 1);
 
             if (!is_bundle_dir(path))
                 continue;
@@ -685,7 +762,7 @@ sign_payload(const char *directory,     /* I - Distribution directory */
         if (inbundle || tolower(file->type) == 'd')
             continue;
 
-        staged_path(path, sizeof(path), directory, prodfull, file->dst);
+        staged_path(path, sizeof(path), directory, prodfull, file->dst, 0);
 
         if (is_macho(path) && add_unique(&binaries, &nbinaries, path) < 0)
             goto nomem;
@@ -728,12 +805,21 @@ static int                          /* O - 0 = success, 1 = fail */
 notarize_file(const char *path,     /* I - File to notarize */
               const char *profile)  /* I - notarytool keychain profile */
 {
+    char qpath[1024], qprofile[1024]; /* Quoted path/profile */
+
+    if (run_quote(qpath, sizeof(qpath), path) ||
+        run_quote(qprofile, sizeof(qprofile), profile)) {
+        fprintf(stderr, "epm: Unable to notarize \"%s\" - path or profile too long.\n",
+                path);
+        return (1);
+    }
+
     if (Verbosity)
         puts("Submitting for notarization...");
 
     if (run_command(NULL,
-                    "/usr/bin/xcrun notarytool submit --wait --keychain-profile '%s' '%s'",
-                    profile, path)) {
+                    "/usr/bin/xcrun notarytool submit --wait --keychain-profile %s %s",
+                    qprofile, qpath)) {
         fputs("epm: Unable to submit for notarization.\n", stderr);
         return (1);
     }
@@ -746,7 +832,7 @@ notarize_file(const char *path,     /* I - File to notarize */
      * submission, so stapling is what actually proves the file was notarized.
      */
 
-    if (run_command(NULL, "/usr/bin/xcrun stapler staple '%s'", path)) {
+    if (run_command(NULL, "/usr/bin/xcrun stapler staple %s", qpath)) {
         fputs("epm: Unable to staple notarization ticket - the submission was\n"
               "     probably rejected; run notarytool log for details.\n",
               stderr);

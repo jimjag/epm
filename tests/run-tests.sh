@@ -18,6 +18,7 @@ cd "$ROOT" || exit 1
 EPM="$ROOT/epm"
 EPMINSTALL="$ROOT/epminstall"
 MKEPMLIST="$ROOT/mkepmlist"
+LIBEPM="$ROOT/libepm.a"
 
 SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/epm-tests.XXXXXX") || exit 1
 cleanup() {
@@ -85,7 +86,7 @@ run_with_timeout() {
 # Preconditions
 # --------------------------------------------------------------------------
 
-if [ ! -x "$EPM" ] || [ ! -x "$EPMINSTALL" ]; then
+if [ ! -x "$EPM" ] || [ ! -x "$EPMINSTALL" ] || [ ! -f "$LIBEPM" ]; then
     echo "tests/run-tests.sh: epm and epminstall must be built first (run 'make')."
     exit 1
 fi
@@ -153,6 +154,82 @@ if compile_test "$SCRATCH/test_run_command" "$ROOT/tests/unit/test_run_command.c
     fi
 else
     fail "test_run_command failed to compile"
+    cat "$SCRATCH/cc.log"
+fi
+
+# --- test_get_uid_gid --------------------------------------------------------
+if compile_test "$SCRATCH/test_get_uid_gid" "$ROOT/tests/unit/test_get_uid_gid.c" \
+    "$LIBEPM"; then
+    if "$SCRATCH/test_get_uid_gid" >"$SCRATCH/out.log" 2>&1; then
+        pass "test_get_uid_gid (numeric owner never resolves to (uid_t)-1)"
+    else
+        fail "test_get_uid_gid - see output below"
+        cat "$SCRATCH/out.log"
+    fi
+else
+    fail "test_get_uid_gid failed to compile"
+    cat "$SCRATCH/cc.log"
+fi
+
+# --- test_run_quote -----------------------------------------------------------
+if compile_test "$SCRATCH/test_run_quote" "$ROOT/tests/unit/test_run_quote.c" "$LIBEPM"; then
+    if "$SCRATCH/test_run_quote" >"$SCRATCH/out.log" 2>&1; then
+        pass "test_run_quote (quotes/backslashes/spaces round-trip through run_command's parser)"
+    else
+        fail "test_run_quote - see output below"
+        cat "$SCRATCH/out.log"
+    fi
+else
+    fail "test_run_quote failed to compile"
+    cat "$SCRATCH/cc.log"
+fi
+
+# --- test_macos_signing -------------------------------------------------------
+# macos.c has no platform #ifdefs of its own, so this runs on any host.
+if compile_test "$SCRATCH/test_macos_signing" "$ROOT/tests/unit/test_macos_signing.c" \
+    "$LIBEPM"; then
+    if "$SCRATCH/test_macos_signing" >"$SCRATCH/out.log" 2>&1; then
+        pass "test_macos_signing (Mach-O magic vs Java .class and byte-swapped fat headers; /etc,/var staging)"
+    else
+        fail "test_macos_signing - see output below"
+        cat "$SCRATCH/out.log"
+    fi
+else
+    fail "test_macos_signing failed to compile"
+    cat "$SCRATCH/cc.log"
+fi
+
+# --- test_bsd_freebsd_pkg -----------------------------------------------------
+# make_freebsd_modern_pkg() only compiles under __FreeBSD__; force it here so
+# this FreeBSD-only code path gets exercised even when running on another
+# platform (there is no FreeBSD CI runner for this project).
+if compile_test "$SCRATCH/test_bsd_freebsd_pkg" "$ROOT/tests/unit/test_bsd_freebsd_pkg.c" \
+    "$LIBEPM" -D__FreeBSD__; then
+    if "$SCRATCH/test_bsd_freebsd_pkg" >"$SCRATCH/out.log" 2>&1; then
+        pass "test_bsd_freebsd_pkg (directory ownership, @exec escaping, and dep notes in the pkg(8) manifest)"
+    else
+        fail "test_bsd_freebsd_pkg - see output below"
+        cat "$SCRATCH/out.log"
+    fi
+else
+    fail "test_bsd_freebsd_pkg failed to compile"
+    cat "$SCRATCH/cc.log"
+fi
+
+# --- test_bsd_legacy_pkg ------------------------------------------------------
+# The legacy pkg_create(8) writer, compiled WITHOUT -D__FreeBSD__ so this
+# covers the generic *BSD (NetBSD/OpenBSD) spelling of the packing list -
+# the variant test_bsd_freebsd_pkg does not reach.
+if compile_test "$SCRATCH/test_bsd_legacy_pkg" "$ROOT/tests/unit/test_bsd_legacy_pkg.c" \
+    "$LIBEPM"; then
+    if "$SCRATCH/test_bsd_legacy_pkg" >"$SCRATCH/out.log" 2>&1; then
+        pass "test_bsd_legacy_pkg (directory ownership and @exec escaping in the legacy *BSD plist)"
+    else
+        fail "test_bsd_legacy_pkg - see output below"
+        cat "$SCRATCH/out.log"
+    fi
+else
+    fail "test_bsd_legacy_pkg failed to compile"
     cat "$SCRATCH/cc.log"
 fi
 
@@ -527,6 +604,127 @@ if "$EPM" -f portable --output-dir patchout patchcapable patchcapable.list \
 else
     fail "epm -f portable failed on a patch-capable list file"
     cat out.log
+fi
+
+section "macOS backend (macos.c)"
+
+# --- a real pkgbuild/hdiutil run through a path containing a space ---------
+# macos.c builds whole command lines for pkgbuild(1) and hdiutil(1) and hands
+# them to run_command(), which does its own argv splitting with no shell.  An
+# unquoted path with a space in it therefore split into two arguments and the
+# build failed outright.  Only a real run exercises those call sites, so this
+# is skipped anywhere the tools are absent.
+if [ "$(uname -s)" = "Darwin" ] && have pkgbuild && have hdiutil; then
+    cat >macostest.list <<EOF
+%product Test
+%copyright 2026
+%vendor Me
+%readme payload.txt
+%version 1.0
+f 0755 root root /usr/local/bin/t payload.txt
+EOF
+
+    SPACEDIR="$WORK/macos out dir"
+    rm -rf "$SPACEDIR"
+    mkdir -p "$SPACEDIR"
+
+    run_with_timeout 120 out.log "$EPM" -f macos --output-dir "$SPACEDIR" \
+        macostest macostest.list
+    status=$?
+
+    if [ "$status" = 124 ]; then
+        fail "macOS package build hung"
+    elif [ "$status" != 0 ]; then
+        fail "epm -f macos failed with an output path containing a space"
+        cat out.log
+    elif [ ! -f "$SPACEDIR/macostest.pkg" ]; then
+        fail "pkgbuild produced no .pkg for an output path containing a space"
+        cat out.log
+    elif ! find "$SPACEDIR" -name '*.dmg' | grep -q .; then
+        fail "hdiutil produced no .dmg for an output path containing a space"
+        cat out.log
+    else
+        pass "a macOS .pkg and .dmg build through an output path containing a space"
+    fi
+
+    rm -rf "$SPACEDIR"
+
+    # --- the same hdiutil call in the portable backend --------------------
+    SPACEDIR="$WORK/portable out dir"
+    rm -rf "$SPACEDIR"
+    mkdir -p "$SPACEDIR"
+
+    run_with_timeout 120 out.log "$EPM" -f portable --output-dir "$SPACEDIR" \
+        ptabletest macostest.list
+    status=$?
+
+    if [ "$status" != 0 ]; then
+        fail "epm -f portable failed with an output path containing a space"
+        cat out.log
+    elif ! find "$SPACEDIR" -name '*.dmg' | grep -q .; then
+        fail "portable backend produced no .dmg for an output path containing a space"
+        cat out.log
+    else
+        pass "the portable backend's disk image builds through a path containing a space"
+    fi
+
+    rm -rf "$SPACEDIR"
+
+    # --- signing command lines are quoted -----------------------------------
+    # pkgbuild --sign and codesign need a real Developer ID to succeed, which
+    # CI does not have.  run_command() echoes each command at -vv *before*
+    # forking, so the quoting can still be checked: assert the paths arrive as
+    # single quoted arguments even though the tools themselves then fail.
+    SPACEDIR="$WORK/signed out dir"
+    rm -rf "$SPACEDIR"
+    mkdir -p "$SPACEDIR"
+
+    # No EPM_APPLICATION_IDENTITY, so payload signing is skipped and the run
+    # reaches the "pkgbuild --sign" call.
+    unset EPM_APPLICATION_IDENTITY
+    EPM_SIGNING_IDENTITY="Some Signer (O'Brien)" \
+        run_with_timeout 120 out.log "$EPM" -vv -f macos-signed \
+        --output-dir "$SPACEDIR" signedtest macostest.list
+
+    sign_pat="--sign 'Some Signer (O\\'Brien)'"
+    if grep -Fq -- "--root '$SPACEDIR/signedtest/Package'" out.log &&
+        grep -Fq -- "--scripts '$SPACEDIR/signedtest/Resources'" out.log &&
+        grep -Fq -- "$sign_pat" out.log; then
+        pass "pkgbuild --sign receives quoted paths and a quoted identity"
+    else
+        fail "pkgbuild --sign command line was not quoted as expected"
+        grep -i pkgbuild out.log | head -2
+    fi
+
+    # With an identity set and a Mach-O in the payload, codesign is reached.
+    cat >machotest.list <<EOF
+%product Test
+%copyright 2026
+%vendor Me
+%readme payload.txt
+%version 1.0
+f 0755 root root /usr/local/bin/epm $ROOT/epm
+EOF
+
+    rm -rf "$SPACEDIR"
+    mkdir -p "$SPACEDIR"
+
+    EPM_APPLICATION_IDENTITY="Some Signer (O'Brien)" \
+        run_with_timeout 120 out.log "$EPM" -vv -f macos-signed \
+        --output-dir "$SPACEDIR" machotest machotest.list
+
+    codesign_pat="--sign 'Some Signer (O\\'Brien)' '$SPACEDIR/machotest/Package/usr/local/bin/epm'"
+    if grep -Fq -- "$codesign_pat" out.log; then
+        pass "codesign receives a quoted identity and a quoted path"
+    else
+        fail "codesign command line was not quoted as expected"
+        grep -i codesign out.log | head -2
+    fi
+
+    unset EPM_APPLICATION_IDENTITY
+    rm -rf "$SPACEDIR"
+else
+    skip "macOS backend end-to-end build (needs Darwin with pkgbuild and hdiutil)"
 fi
 
 section "Command-line validation (epm.c)"

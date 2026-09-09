@@ -28,51 +28,34 @@
 #include <sys/wait.h>
 
 /*
- * 'run_command()' - Run an external program.
+ * 'split_args()' - Split a command buffer into argv entries in place.
+ *
+ * Arguments are separated by whitespace and may be quoted by " or '; within
+ * a quoted span, \X yields a literal X (including \' inside '...' and \"
+ * inside "..."). This is the argument-splitting half of run_command(),
+ * pulled out so it can be exercised directly by run_quote()'s round-trip
+ * test without forking a real process.
  */
 
-int                                /* O - Exit status */
-run_command(const char *directory, /* I - Directory for command or NULL */
-            const char *command,   /* I - Command string */
-            ...)                   /* I - Additional arguments as needed */
+int                     /* O - Number of arguments (argc) */
+split_args(char *argbuf, /* IO - Command buffer, modified in place */
+           char **argv, /* O - Argument pointers */
+           int maxargs) /* I - Size of the argv array */
 {
-    va_list ap;         /* Argument pointer */
-    int pid,            /* Child process ID */
-        status,         /* Status of child */
-        argc;           /* Number of arguments */
-    char argbuf[10240], /* Argument buffer */
-        *argptr,        /* Argument string pointer */
-        *argv[100];     /* Argument strings */
-    int fmtlen;         /* Length vsnprintf() would have produced */
+    char *argptr; /* Argument string pointer */
+    int argc;     /* Number of arguments */
 
     /*
-     * Format the command string...
+     * One slot has to be left for the terminating NULL, so anything smaller
+     * than two cannot hold even a single argument.
      */
 
-    va_start(ap, command);
-    fmtlen = vsnprintf(argbuf, sizeof(argbuf) - 1, command, ap);
-    va_end(ap);
-    argbuf[sizeof(argbuf) - 1] = '\0';
-
-    if (fmtlen < 0 || (size_t)fmtlen >= sizeof(argbuf) - 1) {
-        fprintf(stderr,
-                "epm: Command too long for internal buffer (%d bytes) -\n"
-                "     not running \"%.100s...\".\n",
-                (int)sizeof(argbuf) - 1, argbuf);
-        return (1);
-    }
-
-    if (Verbosity > 1)
-        puts(argbuf);
-
-    /*
-     * Parse the argument string; arguments can be separated by whitespace
-     * and quoted by " and '...
-     */
+    if (maxargs < 2)
+        return (0);
 
     argv[0] = argbuf;
 
-    for (argptr = argbuf, argc = 1; *argptr != '\0' && argc < 99; argptr++)
+    for (argptr = argbuf, argc = 1; *argptr != '\0' && argc < maxargs - 1; argptr++)
         if (isspace(*argptr & 255)) {
             *argptr++ = '\0';
 
@@ -111,13 +94,102 @@ run_command(const char *directory, /* I - Directory for command or NULL */
             argptr--;
         }
 
-    if (argc >= 99 && *argptr != '\0')
+    if (argc >= maxargs - 1 && *argptr != '\0')
         fprintf(stderr,
-                "epm: Warning - command has more than 99 arguments, remainder left "
+                "epm: Warning - command has more than %d arguments, remainder left "
                 "unsplit:\n     \"%s\"\n",
-                argptr);
+                maxargs - 1, argptr);
 
     argv[argc] = NULL;
+
+    return (argc);
+}
+
+/*
+ * 'run_quote()' - Quote a value for safe interpolation into a run_command()
+ *                 format string via a plain %s (no surrounding '...' needed
+ *                 in the format string - this supplies its own).
+ *
+ * split_args() only treats \X as an escape inside a quoted span, so a
+ * literal ' or \ in src must be backslash-escaped or it corrupts argv
+ * splitting (a bare embedded ' ends the span early; a bare embedded \
+ * eats the next character). Truncation is reported via the return value
+ * rather than silently dropping characters.
+ */
+
+int                        /* O - 0 = success, 1 = dst too small */
+run_quote(char *dst,       /* O - Quoted output buffer */
+          size_t dstsize,  /* I - Size of dst */
+          const char *src) /* I - Value to quote */
+{
+    size_t len = 0; /* Bytes written to dst so far */
+
+    if (dstsize < 3)
+        return (1);
+
+    dst[len++] = '\'';
+
+    for (; *src; src++) {
+        if (*src == '\'' || *src == '\\') {
+            if (len >= dstsize - 3)
+                return (1);
+            dst[len++] = '\\';
+        }
+
+        if (len >= dstsize - 2)
+            return (1);
+
+        dst[len++] = *src;
+    }
+
+    dst[len++] = '\'';
+    dst[len] = '\0';
+
+    return (0);
+}
+
+/*
+ * 'run_command()' - Run an external program.
+ */
+
+int                                /* O - Exit status */
+run_command(const char *directory, /* I - Directory for command or NULL */
+            const char *command,   /* I - Command string */
+            ...)                   /* I - Additional arguments as needed */
+{
+    va_list ap;         /* Argument pointer */
+    int pid,            /* Child process ID */
+        status;         /* Status of child */
+    char argbuf[10240], /* Argument buffer */
+        *argv[100];     /* Argument strings */
+    int fmtlen;         /* Length vsnprintf() would have produced */
+
+    /*
+     * Format the command string...
+     */
+
+    va_start(ap, command);
+    fmtlen = vsnprintf(argbuf, sizeof(argbuf) - 1, command, ap);
+    va_end(ap);
+    argbuf[sizeof(argbuf) - 1] = '\0';
+
+    if (fmtlen < 0 || (size_t)fmtlen >= sizeof(argbuf) - 1) {
+        fprintf(stderr,
+                "epm: Command too long for internal buffer (%d bytes) -\n"
+                "     not running \"%.100s...\".\n",
+                (int)sizeof(argbuf) - 1, argbuf);
+        return (1);
+    }
+
+    if (Verbosity > 1)
+        puts(argbuf);
+
+    /*
+     * Parse the argument string; arguments can be separated by whitespace
+     * and quoted by " and '...
+     */
+
+    split_args(argbuf, argv, (int)(sizeof(argv) / sizeof(argv[0])));
 
     /*
      * Execute the command...

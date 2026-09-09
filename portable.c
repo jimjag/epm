@@ -708,10 +708,21 @@ write_combined(const char *title,     /* I - Title */
             return (1);
         }
 
-        if (run_command(NULL, "hdiutil create -ov -srcfolder %s %s", filename,
-                        dmgfilename)) {
-            fputs("epm: Unable to create disk image!\n", stderr);
-            return (1);
+        {
+            char qfilename[1024],   /* Quoted image source folder */
+                qdmgfilename[1024]; /* Quoted disk image filename */
+
+            if (run_quote(qfilename, sizeof(qfilename), filename) ||
+                run_quote(qdmgfilename, sizeof(qdmgfilename), dmgfilename)) {
+                fputs("epm: A disk image path is too long to quote safely.\n", stderr);
+                return (1);
+            }
+
+            if (run_command(NULL, "hdiutil create -ov -srcfolder %s %s", qfilename,
+                            qdmgfilename)) {
+                fputs("epm: Unable to create disk image!\n", stderr);
+                return (1);
+            }
         }
 
         if (!KeepFiles)

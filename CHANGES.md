@@ -26,6 +26,15 @@ Changes in EPM 5.1.0
   the ticket. Behavior is unchanged when `EPM_APPLICATION_IDENTITY` is unset
 - macOS: a failing `pkgbuild` is now reported and aborts the build instead of
   being silently ignored
+- macOS: `-f macos`, `-f macos-signed` and `-f portable` now quote the paths
+  they hand to `pkgbuild(1)`, `codesign(1)` and `hdiutil(1)`. A build whose
+  `--output-dir` contained a space previously failed outright with "Unable to
+  build package" or "Unable to create disk image", and a signing identity
+  containing an apostrophe was split into two arguments
+- BSD: the `@exec` commands that apply directory ownership in a generated
+  packing list now escape whitespace and shell metacharacters in the path.
+  Those commands run as root at install time, so such a path was previously
+  reparsed by the install-time shell
 
 Changes in EPM 5.0.1
 --------------------

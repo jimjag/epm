@@ -178,15 +178,8 @@ static void write_ucl_string(FILE *fp,   /* I - Manifest file */
  *                                releases where pkg_create(8) no longer
  *                                exists (issue #14).
  *
- * pkg(8) is driven by a UCL "+MANIFEST" plus a classic ports_makeplist(5)
- * packing list (the same @cwd/@owner/@group/@mode/@dir/@exec/@unexec
- * directives pkg_create used, per pkg's own ports_parse_plist() - see
- * https://man.freebsd.org/cgi/man.cgi?query=pkg-create&sektion=8 and the
- * FreeBSD Porter's Handbook plist chapter). Pre-install and post-remove
- * commands are not embedded here (unlike @exec/@unexec for post-install/
- * pre-remove, there's no confirmed equivalent for those two phases in this
- * path) and are reported the same way the legacy BSD packager already
- * reports them as unsupported.
+ * Pre-install and post-remove commands aren't supported here, same as the
+ * legacy BSD packager.
  */
 
 static int                                /* O - 0 = success, 1 = fail */
@@ -283,15 +276,31 @@ make_freebsd_modern_pkg(const char *prodname,     /* I - Product short name */
     }
     fputs(";\n", fp);
 
-    for (i = dist->num_depends, d = dist->depends; i > 0; i--, d++)
-        if (d->type == DEPEND_INCOMPAT && d->subpackage == subpackage) {
-            fputs("epm: NOTE - dependency incompatibilities/conflicts are not "
-                  "currently\n"
-                  "     expressed in the pkg(8) manifest for FreeBSD; ignoring "
-                  "requirement\n",
-                  stderr);
-            break;
+    {
+        int warned_incompat = 0, warned_upper = 0;
+
+        for (i = dist->num_depends, d = dist->depends; i > 0; i--, d++) {
+            if (d->subpackage != subpackage)
+                continue;
+
+            if (d->type == DEPEND_INCOMPAT && !warned_incompat) {
+                fputs("epm: NOTE - dependency incompatibilities/conflicts are not "
+                      "currently\n"
+                      "     expressed in the pkg(8) manifest for FreeBSD; ignoring "
+                      "requirement\n",
+                      stderr);
+                warned_incompat = 1;
+            } else if (d->type == DEPEND_REQUIRES && d->vernumber[0] == 0 &&
+                      d->vernumber[1] < INT_MAX && !warned_upper) {
+                fputs("epm: NOTE - upper-bound-only dependency versions are not "
+                      "currently\n"
+                      "     expressed in the pkg(8) manifest for FreeBSD; ignoring "
+                      "constraint\n",
+                      stderr);
+                warned_upper = 1;
+            }
         }
+    }
 
     {
         int wrote_deps = 0;
@@ -368,6 +377,18 @@ make_freebsd_modern_pkg(const char *prodname,     /* I - Product short name */
                 break;
             }
 
+    for (i = dist->num_files, file = dist->files; i > 0; i--, file++)
+        if (tolower(file->type) == 'd' && file->subpackage == subpackage) {
+            /*
+             * @dir alone carries no ownership; set it explicitly as a
+             * postinstall command, matching the legacy pkg_create path.
+             */
+
+            qprintf(fp, "@exec mkdir -p %s\n", file->dst);
+            qprintf(fp, "@exec chown %s:%s %s\n", file->user, file->group, file->dst);
+            qprintf(fp, "@exec chmod %04o %s\n", (int)file->mode, file->dst);
+        }
+
     for (i = dist->num_files, file = dist->files, old_mode = 0, old_user = "",
         old_group = "";
          i > 0; i--, file++) {
@@ -411,10 +432,21 @@ make_freebsd_modern_pkg(const char *prodname,     /* I - Product short name */
 
     snprintf(rootdir, sizeof(rootdir), "%s/%s.buildroot", directory, prodfull);
 
-    if (run_command(NULL,
-                    "/usr/sbin/pkg create -m %s -p %s -r %s -o %s -f txz",
-                    metadir, plistname, rootdir, directory))
-        return (1);
+    {
+        char qmetadir[1024], qplistname[1024], qrootdir[1024], qdirectory[1024];
+
+        if (run_quote(qmetadir, sizeof(qmetadir), metadir) ||
+            run_quote(qplistname, sizeof(qplistname), plistname) ||
+            run_quote(qrootdir, sizeof(qrootdir), rootdir) ||
+            run_quote(qdirectory, sizeof(qdirectory), directory)) {
+            fputs("epm: A build path is too long to quote safely.\n", stderr);
+            return (1);
+        }
+
+        if (run_command(NULL, "/usr/sbin/pkg create -m %s -p %s -r %s -o %s -f txz",
+                        qmetadir, qplistname, qrootdir, qdirectory))
+            return (1);
+    }
 
     /*
      * Remove temporary files...
@@ -646,9 +678,9 @@ make_subpackage(const char *prodname,   /* I - Product short name */
              * avoid a bug in the FreeBSD pkg_delete command.
              */
 
-            fprintf(fp, "@exec mkdir -p %s\n", file->dst);
-            fprintf(fp, "@exec chown %s:%s %s\n", file->user, file->group, file->dst);
-            fprintf(fp, "@exec chmod %04o %s\n", file->mode, file->dst);
+            qprintf(fp, "@exec mkdir -p %s\n", file->dst);
+            qprintf(fp, "@exec chown %s:%s %s\n", file->user, file->group, file->dst);
+            qprintf(fp, "@exec chmod %04o %s\n", (int)file->mode, file->dst);
         }
 
     for (i = dist->num_files, file = dist->files, old_mode = 0, old_user = "",

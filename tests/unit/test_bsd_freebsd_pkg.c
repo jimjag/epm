@@ -2,10 +2,10 @@
  * Regression tests for bsd.c's FreeBSD pkg(8) manifest/plist writer.
  *
  * make_freebsd_modern_pkg() is static and only compiled under __FreeBSD__,
- * so this test #includes bsd.c directly and must be compiled with
- * -D__FreeBSD__ (this file is not itself FreeBSD-specific - it's testing
- * FreeBSD-only code from any host, the same way the code was developed and
- * manually verified without access to a real FreeBSD machine).
+ * so this test #includes bsd.c directly with that macro defined (this file
+ * is not itself FreeBSD-specific - it's testing FreeBSD-only code from any
+ * host, the same way the code was developed and manually verified without
+ * access to a real FreeBSD machine).
  *
  * Covers three review findings:
  *  - Directory entries' owner/group/mode were silently dropped: the plist
@@ -30,11 +30,21 @@
  */
 
 #include "../../epm.h"
-#include "../../bsd.c"
 
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
+
+/*
+ * Define __FreeBSD__ here rather than on the command line: -D__FreeBSD__
+ * makes glibc's headers take a BSD branch and look for <sys/_types.h>, which
+ * does not exist on Linux.  Every system header is already included above,
+ * and epm.h is guarded, so bsd.c's own #include of it is a no-op - only
+ * bsd.c is read with the macro set.
+ */
+
+#define __FreeBSD__ 1
+#include "../../bsd.c"
 
 int Verbosity = 2; /* make run_command() echo the command it would run */
 int KeepFiles = 1; /* keep the metadata dir around so we can inspect it */

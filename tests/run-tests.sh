@@ -200,11 +200,11 @@ else
 fi
 
 # --- test_bsd_freebsd_pkg -----------------------------------------------------
-# make_freebsd_modern_pkg() only compiles under __FreeBSD__; force it here so
-# this FreeBSD-only code path gets exercised even when running on another
-# platform (there is no FreeBSD CI runner for this project).
+# make_freebsd_modern_pkg() only compiles under __FreeBSD__; the test defines
+# that itself so this FreeBSD-only code path gets exercised even when running
+# on another platform (there is no FreeBSD CI runner for this project).
 if compile_test "$SCRATCH/test_bsd_freebsd_pkg" "$ROOT/tests/unit/test_bsd_freebsd_pkg.c" \
-    "$LIBEPM" -D__FreeBSD__; then
+    "$LIBEPM"; then
     if "$SCRATCH/test_bsd_freebsd_pkg" >"$SCRATCH/out.log" 2>&1; then
         pass "test_bsd_freebsd_pkg (directory ownership, @exec escaping, and dep notes in the pkg(8) manifest)"
     else

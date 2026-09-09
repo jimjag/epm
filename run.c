@@ -43,14 +43,24 @@ run_command(const char *directory, /* I - Directory for command or NULL */
     char argbuf[10240], /* Argument buffer */
         *argptr,        /* Argument string pointer */
         *argv[100];     /* Argument strings */
+    int fmtlen;         /* Length vsnprintf() would have produced */
 
     /*
      * Format the command string...
      */
 
     va_start(ap, command);
-    vsnprintf(argbuf, sizeof(argbuf) - 1, command, ap);
+    fmtlen = vsnprintf(argbuf, sizeof(argbuf) - 1, command, ap);
+    va_end(ap);
     argbuf[sizeof(argbuf) - 1] = '\0';
+
+    if (fmtlen < 0 || (size_t)fmtlen >= sizeof(argbuf) - 1) {
+        fprintf(stderr,
+                "epm: Command too long for internal buffer (%d bytes) -\n"
+                "     not running \"%.100s...\".\n",
+                (int)sizeof(argbuf) - 1, argbuf);
+        return (1);
+    }
 
     if (Verbosity > 1)
         puts(argbuf);
@@ -101,6 +111,12 @@ run_command(const char *directory, /* I - Directory for command or NULL */
             argptr--;
         }
 
+    if (argc >= 99 && *argptr != '\0')
+        fprintf(stderr,
+                "epm: Warning - command has more than 99 arguments, remainder left "
+                "unsplit:\n     \"%s\"\n",
+                argptr);
+
     argv[argc] = NULL;
 
     /*
@@ -124,11 +140,16 @@ run_command(const char *directory, /* I - Directory for command or NULL */
         }
 
         /*
-         * Change directories...
+         * Change directories...  A failure here means the command would run
+         * in the wrong directory, which is worse than not running it at all -
+         * bail out rather than fall through to execvp()...
          */
 
-        if (directory)
-            chdir(directory);
+        if (directory && chdir(directory)) {
+            fprintf(stderr, "epm: Unable to change to directory \"%s\": %s\n", directory,
+                    strerror(errno));
+            _exit(errno ? errno : 1);
+        }
 
         /*
          * Execute the program; if an error occurs, exit with the UNIX error...
@@ -137,7 +158,7 @@ run_command(const char *directory, /* I - Directory for command or NULL */
         execvp(argv[0], argv);
         fprintf(stderr, "epm: Unable to execute \"%s\" program: %s\n", argv[0],
                 strerror(errno));
-        exit(errno);
+        _exit(errno ? errno : 1);
     } else if (pid < 0) {
         /*
          * Error - can't fork!

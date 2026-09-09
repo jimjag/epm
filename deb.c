@@ -28,6 +28,34 @@
  * Local functions...
  */
 
+static void write_control_description(FILE *fp, const char *text);
+
+/*
+ * 'write_control_description()' - Write a (possibly multi-line) description
+ *                                  as Debian control-file continuation lines.
+ *
+ * Every continuation line in a Debian control file must start with a space,
+ * or an embedded blank line ends the field early and whatever follows is
+ * parsed as new control fields...
+ */
+
+static void write_control_description(FILE *fp,     /* I - Control file */
+                                      const char *text) /* I - Description text */
+{
+    const char *start, /* Start of current line */
+        *nl;           /* Next newline in text */
+
+    for (start = text; (nl = strchr(start, '\n')) != NULL; start = nl + 1) {
+        if (nl == start)
+            fputs(" .\n", fp); /* Blank line -> literal "." per control(5) */
+        else
+            fprintf(fp, " %.*s\n", (int)(nl - start), start);
+    }
+
+    if (*start)
+        fprintf(fp, " %s\n", start);
+}
+
 /*
  * 'add_size()' - Append Installed-Size tag to DEBIAN/control file
  *                Used for AOO packages
@@ -43,7 +71,12 @@ add_size(FILE *fpControl,       /* Control file stream */
     fp = popen(command, "r");
     if (NULL != fp) {
         char size[1024];
-        fscanf(fp, "%s .", size);
+
+        if (fscanf(fp, "%1023s .", size) != 1) {
+            pclose(fp);
+            return 1;
+        }
+
         fprintf(fpControl, "Installed-Size: %s\n", size);
         return pclose(fp);
     }
@@ -284,6 +317,9 @@ make_subpackage(const char *prodname,     /* I - Product short name */
 #endif
     else if (!strcmp(platform->machine, "ppc"))
         fputs("Architecture: powerpc\n", fp);
+    else if (!strcmp(platform->machine, "ppc64le"))
+        /* Debian's name for this architecture is "ppc64el", not "ppc64le"... */
+        fputs("Architecture: ppc64el\n", fp);
     else
         fprintf(fp, "Architecture: %s\n", platform->machine);
 
@@ -291,7 +327,7 @@ make_subpackage(const char *prodname,     /* I - Product short name */
     fprintf(fp, " Copyright: %s\n", dist->copyright);
     for (i = 0; i < dist->num_descriptions; i++)
         if (dist->descriptions[i].subpackage == subpackage)
-            fprintf(fp, " %s\n", dist->descriptions[i].description);
+            write_control_description(fp, dist->descriptions[i].description);
 
     for (j = DEPEND_REQUIRES; j <= DEPEND_PROVIDES; j++) {
         for (i = dist->num_depends, d = dist->depends; i > 0; i--, d++)

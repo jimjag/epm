@@ -84,29 +84,32 @@ epm_strlcat(char *dst,       /* O - Destination string */
 {
     size_t srclen; /* Length of source string */
     size_t dstlen; /* Length of destination string */
+    size_t room;   /* Room left in destination buffer */
 
     /*
-     * Figure out how much room is left...
+     * Figure out how much room is left...  If the destination string
+     * already fills (or overflows) the buffer, there is no room and we
+     * must not touch dst[] - just report the length the concatenation
+     * would have had, as strlcat() does...
      */
+
+    if (size == 0)
+        return (strlen(src));
 
     dstlen = strlen(dst);
-    size -= dstlen + 1;
-
-    if (!size)
-        return (dstlen); /* No room, return immediately... */
-
-    /*
-     * Figure out how much room is needed...
-     */
-
     srclen = strlen(src);
+
+    if (dstlen >= (size - 1))
+        return (dstlen + srclen);
+
+    room = size - dstlen - 1;
 
     /*
      * Copy the appropriate amount...
      */
 
-    if (srclen > size)
-        srclen = size;
+    if (srclen > room)
+        srclen = room;
 
     memcpy(dst + dstlen, src, srclen);
     dst[dstlen + srclen] = '\0';

@@ -110,6 +110,7 @@ tar_directory(tarf_t *tar,         /* I - Tar file to write to */
     char src[1024],      /* Source file */
         dst[1024],       /* Destination file */
         srclink[1024];   /* Symlink value */
+    ssize_t linklen;     /* Length of symlink target */
     struct stat srcinfo; /* Information on the source file */
 
     /*
@@ -180,8 +181,10 @@ tar_directory(tarf_t *tar,         /* I - Tar file to write to */
              * Symlink...
              */
 
-            if (readlink(src, srclink, sizeof(srclink)) < 0)
+            if ((linklen = readlink(src, srclink, sizeof(srclink) - 1)) < 0)
                 goto fail;
+
+            srclink[linklen] = '\0';
 
             if (tar_header(tar, TAR_SYMLINK, srcinfo.st_mode, 0, srcinfo.st_mtime, "root",
                            "sys", dst, srclink))
@@ -369,12 +372,27 @@ tar_header(tarf_t *fp,           /* I - Tar file to write to */
         strlcpy(record.header.prefix, pathname, (size_t)(pathsep - pathname + 1));
     }
 
+    /*
+     * The size field holds 11 octal digits, so the largest representable
+     * size is 8^11 - 1 (~8GB); a size that doesn't fit would otherwise be
+     * silently truncated to 32 bits by a cast, producing a corrupt archive
+     * with no error...
+     */
+
+    if (size < 0 || size > (off_t)8589934591LL) {
+        fprintf(stderr,
+                "epm: File \"%s\" is too large (%lld bytes) for a tar file!\n", pathname,
+                (long long)size);
+        return (-1);
+    }
+
     snprintf(record.header.mode, sizeof(record.header.mode), "%-6o ", (unsigned)mode);
     snprintf(record.header.uid, sizeof(record.header.uid), "%o ",
              pwd == NULL ? 0 : (unsigned)pwd->pw_uid);
     snprintf(record.header.gid, sizeof(record.header.gid), "%o ",
              grp == NULL ? 0 : (unsigned)grp->gr_gid);
-    snprintf(record.header.size, sizeof(record.header.size), "%011o", (unsigned)size);
+    snprintf(record.header.size, sizeof(record.header.size), "%011llo",
+             (unsigned long long)size);
     snprintf(record.header.mtime, sizeof(record.header.mtime), "%011o", (unsigned)mtime);
     memset(&(record.header.chksum), ' ', sizeof(record.header.chksum));
     record.header.linkflag = type;
@@ -423,7 +441,7 @@ tar_open(const char *filename, /* I - File to create */
          int compress)         /* I - Compress with gzip? */
 {
     tarf_t *fp;         /* New tar file */
-    char command[1024]; /* Compression command */
+    char command[2048]; /* Compression command */
 
     /*
      * Allocate memory for the tar file state...
@@ -437,7 +455,48 @@ tar_open(const char *filename, /* I - File to create */
      */
 
     if (compress) {
-        snprintf(command, sizeof(command), EPM_GZIP " > %s", filename);
+        char quoted[2048], /* Shell-quoted filename */
+            *qptr;         /* Pointer into quoted buffer */
+        const char *s;     /* Pointer into filename */
+        int len;           /* Length that snprintf() would have produced */
+
+        /*
+         * popen() always runs the command through "sh -c"; single-quote the
+         * filename so directory/product names containing shell metacharacters
+         * can't inject additional commands...
+         */
+
+        qptr = quoted;
+        *qptr++ = '\'';
+        for (s = filename; *s && qptr < (quoted + sizeof(quoted) - 6); s++) {
+            if (*s == '\'') {
+                *qptr++ = '\'';
+                *qptr++ = '\\';
+                *qptr++ = '\'';
+                *qptr++ = '\'';
+            } else
+                *qptr++ = *s;
+        }
+        *qptr++ = '\'';
+        *qptr = '\0';
+
+        if (*s) {
+            /*
+             * Ran out of room before the whole filename was quoted...
+             */
+
+            fprintf(stderr, "epm: Filename \"%s\" is too long to compress.\n", filename);
+            free(fp);
+            return (NULL);
+        }
+
+        len = snprintf(command, sizeof(command), EPM_GZIP " > %s", quoted);
+        if (len < 0 || (size_t)len >= sizeof(command)) {
+            fprintf(stderr, "epm: Filename \"%s\" is too long to compress.\n", filename);
+            free(fp);
+            return (NULL);
+        }
+
         fp->file = popen(command, "w");
     } else
         fp->file = fopen(filename, "wb");

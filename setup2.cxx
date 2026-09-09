@@ -89,6 +89,7 @@ typedef int (*compare_func_t)(const void *, const void *);
 // Local functions...
 //
 
+static const char *shell_quote(const char *s);
 void get_dists(const char *d);
 int install_dist(const gui_dist_t *dist);
 int license_dist(const gui_dist_t *dist);
@@ -198,6 +199,42 @@ main(int argc,     // I - Number of command-line arguments
 }
 
 //
+// 'shell_quote()' - Single-quote a string for safe use in a popen() command.
+//
+// popen() always runs its argument through "sh -c", so any filename taken
+// from the distribution directory has to be quoted before it's interpolated
+// into a command string - otherwise a maliciously-named package file could
+// inject additional shell commands...
+//
+
+static const char * // O - Quoted string (static buffer, not reentrant)
+shell_quote(const char *s) // I - String to quote
+{
+    static char quoted[2048]; // Quoted string buffer
+    char *q;                  // Pointer into quoted buffer
+    const char *qend;         // End of usable quoted buffer
+
+    q = quoted;
+    qend = quoted + sizeof(quoted) - 6;
+    *q++ = '\'';
+
+    for (; *s && q < qend; s++) {
+        if (*s == '\'') {
+            *q++ = '\'';
+            *q++ = '\\';
+            *q++ = '\'';
+            *q++ = '\'';
+        } else
+            *q++ = *s;
+    }
+
+    *q++ = '\'';
+    *q = '\0';
+
+    return (quoted);
+}
+
+//
 // 'get_dists()' - Get a list of available software products.
 //
 
@@ -245,7 +282,11 @@ void get_dists(const char *d) // I - Directory to look in
             temp->filename = strdup(files[i]->d_name);
 
             strncpy(temp->product, files[i]->d_name, sizeof(temp->product) - 1);
-            *strrchr(temp->product, '.') = '\0'; // Drop .install
+            temp->product[sizeof(temp->product) - 1] = '\0';
+
+            char *dot = strrchr(temp->product, '.'); // Drop .install
+            if (dot)
+                *dot = '\0';
 
             // Read info from the installation script...
             while (fgets(line, sizeof(line), fp) != NULL) {
@@ -257,8 +298,10 @@ void get_dists(const char *d) // I - Directory to look in
                 line[strlen(line) - 1] = '\0';
 
                 // Copy data as needed...
-                if (strncmp(line, "#%product ", 10) == 0)
+                if (strncmp(line, "#%product ", 10) == 0) {
                     strncpy(temp->name, line + 10, sizeof(temp->name) - 1);
+                    temp->name[sizeof(temp->name) - 1] = '\0';
+                }
                 else if (strncmp(line, "#%version ", 10) == 0)
                     sscanf(line + 10, "%31s%d", temp->version, &(temp->vernumber));
                 else if (strncmp(line, "#%rootsize ", 11) == 0)
@@ -270,7 +313,7 @@ void get_dists(const char *d) // I - Directory to look in
                     lowver = 0;
                     hiver = 0;
 
-                    if (sscanf(line + 11, "%s%*s%d%*s%d", product, &lowver, &hiver) > 0)
+                    if (sscanf(line + 11, "%63s%*s%d%*s%d", product, &lowver, &hiver) > 0)
                         gui_add_depend(
                             temp, (line[2] == 'i') ? DEPEND_INCOMPAT : DEPEND_REQUIRES,
                             product, lowver, hiver);
@@ -287,7 +330,7 @@ void get_dists(const char *d) // I - Directory to look in
             // Get the package information...
             snprintf(line, sizeof(line),
                      "rpm -qp --qf '%%{NAME}|%%{VERSION}|%%{SIZE}|%%{SUMMARY}\\n' %s",
-                     files[i]->d_name);
+                     shell_quote(files[i]->d_name));
 
             if ((fp = popen(line, "r")) == NULL) {
                 free(files[i]);

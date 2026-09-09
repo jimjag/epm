@@ -171,10 +171,10 @@ main(int argc,     /* I - Number of command-line arguments */
                 if (!file)
                     file = add_file(dist, NULL);
 
-                if (stat(files[0], &fileinfo)) {
+                if (lstat(files[0], &fileinfo)) {
                     fprintf(stderr, "epminstall: Unable to stat \"%s\": %s\n", files[0],
                             strerror(errno));
-                    fileinfo.st_mode = mode;
+                    fileinfo.st_mode = S_IFREG | (mode_t)(mode ? mode : 0644);
                 }
 
                 if (S_ISLNK(fileinfo.st_mode)) {
@@ -246,10 +246,10 @@ main(int argc,     /* I - Number of command-line arguments */
                 if ((file = find_file(dist, dst)) == NULL)
                     file = add_file(dist, NULL);
 
-                if (stat(files[i], &fileinfo)) {
+                if (lstat(files[i], &fileinfo)) {
                     fprintf(stderr, "epminstall: Unable to stat \"%s\": %s\n", files[i],
                             strerror(errno));
-                    fileinfo.st_mode = mode;
+                    fileinfo.st_mode = S_IFREG | (mode_t)(mode ? mode : 0644);
                 }
 
                 if (S_ISLNK(fileinfo.st_mode)) {

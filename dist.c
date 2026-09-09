@@ -26,6 +26,14 @@
 #include <pwd.h>
 
 /*
+ * Not all platforms define PATH_MAX in <limits.h> (e.g. GNU Hurd)...
+ */
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif /* !PATH_MAX */
+
+/*
  * Some versions of Solaris don't define gethostname()...
  */
 
@@ -60,6 +68,8 @@ static void update_architecture(char *buffer, size_t bufsize);
 #define SKIP_IFSAT 32    /* Set if an #if statement has been satisfied */
 #define SKIP_MASK 15     /* Bits to look at */
 
+#define EPM_MAX_INCLUDE 10 /* Maximum %include nesting depth */
+
 /*
  * 'add_command()' - Add a command to the distribution...
  */
@@ -73,6 +83,17 @@ void add_command(dist_t *dist,        /* I - Distribution */
 {
     command_t *temp; /* New command */
     char buf[16384]; /* File import buffer */
+
+    if (type == COMMAND_LITERAL && (!section || !*section)) {
+        /*
+         * Every backend that consumes COMMAND_LITERAL commands assumes
+         * a non-NULL section name; refuse to create one without it rather
+         * than let a later strcmp(c->section, ...) crash on NULL...
+         */
+
+        fputs("epm: Ignoring %literal command with no section name.\n", stderr);
+        return;
+    }
 
     if (!strncmp(command, "<<", 2)) {
         for (command += 2; isspace(*command & 255); command++)
@@ -303,20 +324,32 @@ file_t *                     /* O - New file */
 add_file(dist_t *dist,       /* I - Distribution */
          const char *subpkg) /* I - Subpackage name */
 {
-    file_t *file; /* New file */
+    file_t *temp; /* New file array */
 
     if (dist->num_files == 0)
-        dist->files = (file_t *)malloc(sizeof(file_t));
+        temp = (file_t *)malloc(sizeof(file_t));
     else
-        dist->files =
-            (file_t *)realloc(dist->files, sizeof(file_t) * (dist->num_files + 1));
+        temp = (file_t *)realloc(dist->files, sizeof(file_t) * (dist->num_files + 1));
 
-    file = dist->files + dist->num_files;
+    if (!temp) {
+        perror("epm: Out of memory allocating a file");
+        exit(1);
+    }
+
+    dist->files = temp;
+
+    /*
+     * Clear the new entry - callers rely on this to leave unset fields
+     * (options, etc.) as empty strings rather than stack/heap garbage...
+     */
+
+    memset(dist->files + dist->num_files, 0, sizeof(file_t));
+
     dist->num_files++;
 
-    file->subpackage = subpkg;
+    dist->files[dist->num_files - 1].subpackage = subpkg;
 
-    return (file);
+    return (dist->files + dist->num_files - 1);
 }
 
 /*
@@ -674,7 +707,8 @@ read_dist(const char *filename,     /* I - Main distribution list file */
           struct utsname *platform, /* I - Platform information */
           const char *format)       /* I - Format of distribution */
 {
-    FILE *listfiles[10];  /* File lists */
+    FILE *listfiles[EPM_MAX_INCLUDE]; /* File lists */
+    char *listnames[EPM_MAX_INCLUDE]; /* Canonical name of each open list file */
     int listlevel;        /* Level in file list */
     char line[2048],      /* Expanded line from list file */
         buf[1024];        /* Original line from list file */
@@ -710,6 +744,15 @@ read_dist(const char *filename,     /* I - Main distribution list file */
         fprintf(stderr, "epm: Unable to open list file \"%s\" -\n     %s\n", filename,
                 strerror(errno));
         return (NULL);
+    }
+
+    {
+        char resolved[PATH_MAX]; /* Canonical path buffer */
+
+        if (realpath(filename, resolved) != NULL)
+            listnames[0] = strdup(resolved);
+        else
+            listnames[0] = strdup(filename);
     }
 
     /*
@@ -753,12 +796,41 @@ read_dist(const char *filename,     /* I - Main distribution list file */
                  */
 
                 if (!strcmp(line, "%include")) {
-                    listlevel++;
+                    if (listlevel >= (EPM_MAX_INCLUDE - 1)) {
+                        fprintf(stderr,
+                                "epm: Too many nested %%include files (limit is %d) -\n"
+                                "     not including \"%s\".\n",
+                                EPM_MAX_INCLUDE, temp);
+                    } else {
+                        char *incname;           /* Canonical name of included file */
+                        char resolved[PATH_MAX]; /* Canonical path buffer */
+                        int i;                   /* Looping var */
 
-                    if ((listfiles[listlevel] = fopen(temp, "r")) == NULL) {
-                        fprintf(stderr, "epm: Unable to include \"%s\" -\n     %s\n",
-                                temp, strerror(errno));
-                        listlevel--;
+                        if (realpath(temp, resolved) != NULL)
+                            incname = strdup(resolved);
+                        else
+                            incname = strdup(temp);
+
+                        for (i = 0; i <= listlevel; i++)
+                            if (incname && listnames[i] && !strcmp(incname, listnames[i]))
+                                break;
+
+                        if (i <= listlevel) {
+                            fprintf(stderr,
+                                    "epm: Circular %%include of \"%s\" ignored.\n", temp);
+                            free(incname);
+                        } else {
+                            listlevel++;
+
+                            if ((listfiles[listlevel] = fopen(temp, "r")) == NULL) {
+                                fprintf(stderr,
+                                        "epm: Unable to include \"%s\" -\n     %s\n", temp,
+                                        strerror(errno));
+                                listlevel--;
+                                free(incname);
+                            } else
+                                listnames[listlevel] = incname;
+                        }
                     }
                 } else if (!strcmp(line, "%description"))
                     add_description(dist, listfiles[listlevel], temp, subpkg);
@@ -788,8 +860,12 @@ read_dist(const char *filename,     /* I - Main distribution list file */
                     if ((ptr = strchr(section, ')')) != NULL) {
                         *ptr = '\0';
 
-                        add_command(dist, listfiles[listlevel], COMMAND_LITERAL, temp,
-                                    subpkg, section);
+                        if (!*section)
+                            fputs("epm: Ignoring %literal() with no section name.\n",
+                                  stderr);
+                        else
+                            add_command(dist, listfiles[listlevel], COMMAND_LITERAL, temp,
+                                        subpkg, section);
                     } else
                         fputs("epm: Ignoring bad %literal(section) line in list file.\n",
                               stderr);
@@ -1034,6 +1110,7 @@ read_dist(const char *filename,     /* I - Main distribution list file */
         }
 
         fclose(listfiles[listlevel]);
+        free(listnames[listlevel]);
         listlevel--;
     } while (listlevel >= 0);
 
@@ -1208,7 +1285,11 @@ write_dist(const char *listname, /* I - File to write to */
             fprintf(listfile, "%%subpackage %s\n", subpkg ? subpkg : "");
         }
 
-        fputs(commands[(int)dist->commands[i].type], listfile);
+        if (dist->commands[i].type == COMMAND_LITERAL)
+            fprintf(listfile, "%%literal(%s)",
+                    dist->commands[i].section ? dist->commands[i].section : "");
+        else
+            fputs(commands[(int)dist->commands[i].type], listfile);
 
         is_inline = strchr(dist->commands[i].command, '\n') != NULL;
 
@@ -1238,9 +1319,17 @@ write_dist(const char *listname, /* I - File to write to */
         fprintf(listfile, "%c %04o %s %s %s %s", file->type, file->mode, file->user,
                 file->group, file->dst, file->src);
 
-        if (file->options[0])
-            fprintf(listfile, "%s\n", file->options);
-        else
+        if (file->options[0]) {
+            /*
+             * The options field is a single get_string() token when read back
+             * in; quote it if it contains whitespace so it round-trips...
+             */
+
+            if (strpbrk(file->options, " \t") != NULL)
+                fprintf(listfile, " \"%s\"\n", file->options);
+            else
+                fprintf(listfile, " %s\n", file->options);
+        } else
             putc('\n', listfile);
     }
 
@@ -1341,7 +1430,12 @@ get_file(const char *filename, /* I  - File to read from */
         return (NULL);
     }
 
-    if (info.st_size > (size - 1)) {
+    if (S_ISDIR(info.st_mode)) {
+        fprintf(stderr, "epm: \"%s\" is a directory, not a file.\n", filename);
+        return (NULL);
+    }
+
+    if (info.st_size > (off_t)(size - 1)) {
         fprintf(stderr,
                 "epm: File \"%s\" is too large (%d bytes) for buffer (%d bytes)\n",
                 filename, (int)info.st_size, (int)size - 1);
@@ -1353,7 +1447,17 @@ get_file(const char *filename, /* I  - File to read from */
         return (NULL);
     }
 
-    if ((fread(buffer, 1, (size_t)info.st_size, fp)) < info.st_size) {
+    if (info.st_size == 0) {
+        /*
+         * Empty file - nothing to read or expand...
+         */
+
+        fclose(fp);
+        buffer[0] = '\0';
+        return (buffer);
+    }
+
+    if ((fread(buffer, 1, (size_t)info.st_size, fp)) < (size_t)info.st_size) {
         fprintf(stderr, "epm: Unable to read \"%s\": %s\n", filename, strerror(errno));
         fclose(fp);
         return (NULL);
@@ -2104,9 +2208,13 @@ static void update_architecture(char *buffer,   /* I - String buffer */
             strlcpy(buffer, "x86_64", bufsize);
         else
             strlcpy(buffer, "intel", bufsize);
-    } else if (!strncmp(buffer, "arm", 3))
+    } else if (!strcmp(buffer, "arm64") || !strcmp(buffer, "aarch64"))
+        strlcpy(buffer, "arm64", bufsize);
+    else if (!strncmp(buffer, "arm", 3))
         strlcpy(buffer, "arm", bufsize);
-    else if (!strncmp(buffer, "ppc", 3))
+    else if (!strcmp(buffer, "ppc64le") || !strcmp(buffer, "powerpc64le"))
+        strlcpy(buffer, "ppc64le", bufsize);
+    else if (!strncmp(buffer, "ppc", 3) || !strncmp(buffer, "powerpc", 7))
         strlcpy(buffer, "powerpc", bufsize);
     else if (!strncmp(buffer, "sun", 3))
         strlcpy(buffer, "sparc", bufsize);

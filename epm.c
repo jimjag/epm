@@ -356,8 +356,14 @@ main(int argc,     /* I - Number of command-line args */
 
     for (i = 0; prodname[i]; i++)
         if (!isalnum(prodname[i] & 255)) {
+            /*
+             * The product name flows unescaped into filenames and into
+             * several sh -c invocations in the format backends, so this is a
+             * hard requirement, not just a style suggestion...
+             */
+
             puts("epm: Product names should only contain letters and numbers!");
-            break;
+            usage();
         }
 
     if (!listname[0])

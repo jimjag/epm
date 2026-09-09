@@ -137,6 +137,9 @@ make_rpm(int format,               /* I - Subformat */
         snprintf(filename, sizeof(filename), "%s/RPMS/i386", directory);
     else if (!strcmp(platform->machine, "ppc"))
         snprintf(filename, sizeof(filename), "%s/RPMS/ppc", directory);
+    else if (!strcmp(platform->machine, "arm64"))
+        /* rpmbuild's target arch for 64-bit ARM is "aarch64", not "arm64"... */
+        snprintf(filename, sizeof(filename), "%s/RPMS/aarch64", directory);
     else
         snprintf(filename, sizeof(filename), "%s/RPMS/%s", directory, platform->machine);
 
@@ -238,6 +241,13 @@ make_rpm(int format,               /* I - Subformat */
                                      "ppc %s%s",
                         absdir, build_option, specname))
             return (1);
+    } else if (!strcmp(platform->machine, "arm64")) {
+        /* rpmbuild's target arch for 64-bit ARM is "aarch64", not "arm64"... */
+        if (run_command(NULL,
+                        EPM_RPMBUILD " -bb --buildroot \"%s/buildroot\" " EPM_RPMARCH
+                                     "aarch64 %s%s",
+                        absdir, build_option, specname))
+            return (1);
     } else if (run_command(NULL,
                            EPM_RPMBUILD " -bb --buildroot \"%s/buildroot\" " EPM_RPMARCH
                                         "%s %s%s",
@@ -249,11 +259,13 @@ make_rpm(int format,               /* I - Subformat */
      * product name specified by the user...
      */
 
-    move_rpms(prodname, directory, platname, dist, platform, rpmdir, NULL, release);
+    if (move_rpms(prodname, directory, platname, dist, platform, rpmdir, NULL, release))
+        return (1);
 
     for (i = 0; i < dist->num_subpackages; i++)
-        move_rpms(prodname, directory, platname, dist, platform, rpmdir,
-                  dist->subpackages[i], release);
+        if (move_rpms(prodname, directory, platname, dist, platform, rpmdir,
+                      dist->subpackages[i], release))
+            return (1);
 
     /*
      * Build a compressed tar file to hold all of the subpackages...
@@ -491,26 +503,37 @@ move_rpms(const char *prodname,     /* I - Product short name */
 
     strlcat(rpmname, ".rpm", sizeof(rpmname));
 
-    if (!strcmp(platform->machine, "intel"))
-        run_command(NULL, "/bin/mv %s/RPMS/i386/%s-%s-%s.i386.rpm %s", rpmdir, prodfull,
-                    dist->version, release, rpmname);
-    else if (!strcmp(platform->sysname, "aix") && !strcmp(platform->machine, "ppc"))
-        run_command(NULL, "/bin/mv %s/RPMS/ppc/%s-%s-%s.%s%s.ppc.rpm %s", rpmdir,
-                    prodfull, dist->version, release, platform->sysname,
-                    platform->release, rpmname);
-    else if (!strcmp(platform->machine, "ppc"))
-        run_command(NULL, "/bin/mv %s/RPMS/powerpc/%s-%s-%s.powerpc.rpm %s", rpmdir,
-                    prodfull, dist->version, release, rpmname);
-    else
-        run_command(NULL, "/bin/mv %s/RPMS/%s/%s-%s-%s.%s.rpm %s", rpmdir,
-                    platform->machine, prodfull, dist->version, release,
-                    platform->machine, rpmname);
+    if (!strcmp(platform->machine, "intel")) {
+        if (run_command(NULL, "/bin/mv %s/RPMS/i386/%s-%s-%s.i386.rpm %s", rpmdir,
+                        prodfull, dist->version, release, rpmname))
+            return (-1);
+    } else if (!strcmp(platform->sysname, "aix") && !strcmp(platform->machine, "ppc")) {
+        if (run_command(NULL, "/bin/mv %s/RPMS/ppc/%s-%s-%s.%s%s.ppc.rpm %s", rpmdir,
+                        prodfull, dist->version, release, platform->sysname,
+                        platform->release, rpmname))
+            return (-1);
+    } else if (!strcmp(platform->machine, "ppc")) {
+        if (run_command(NULL, "/bin/mv %s/RPMS/powerpc/%s-%s-%s.powerpc.rpm %s", rpmdir,
+                        prodfull, dist->version, release, rpmname))
+            return (-1);
+    } else if (!strcmp(platform->machine, "arm64")) {
+        /* rpmbuild's target arch for 64-bit ARM is "aarch64", not "arm64"... */
+        if (run_command(NULL, "/bin/mv %s/RPMS/aarch64/%s-%s-%s.aarch64.rpm %s", rpmdir,
+                        prodfull, dist->version, release, rpmname))
+            return (-1);
+    } else if (run_command(NULL, "/bin/mv %s/RPMS/%s/%s-%s-%s.%s.rpm %s", rpmdir,
+                           platform->machine, prodfull, dist->version, release,
+                           platform->machine, rpmname))
+        return (-1);
 
-    if (Verbosity) {
-        stat(rpmname, &rpminfo);
-
-        printf("    %7.0fk  %s\n", rpminfo.st_size / 1024.0, rpmname);
+    if (stat(rpmname, &rpminfo)) {
+        fprintf(stderr, "epm: Unable to find built RPM \"%s\": %s\n", rpmname,
+                strerror(errno));
+        return (-1);
     }
+
+    if (Verbosity)
+        printf("    %7.0fk  %s\n", rpminfo.st_size / 1024.0, rpmname);
 
     return (0);
 }

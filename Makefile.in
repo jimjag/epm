@@ -219,6 +219,7 @@ test:	$(TARGETS)
 	else \
 		echo Portable distribution build test FAILED.; \
 		cat test.log; \
+		exit 1; \
 	fi
 	echo Starting native distribution build test...
 	if ./epm -vv -s default.png -f native \
@@ -228,8 +229,11 @@ test:	$(TARGETS)
 	else \
 		echo Native distribution build test FAILED.; \
 		cat test.log; \
+		exit 1; \
 	fi
 	$(RM) test.log
+	echo Starting regression test suite...
+	sh $(srcdir)/tests/run-tests.sh
 
 
 # Make distributions in different formats using EPM...

@@ -177,7 +177,7 @@ static void clean_distfiles(const char *directory,  /* I - Directory */
     snprintf(filename, sizeof(filename), "%s/%s.psw", directory, prodfull);
     unlink(filename);
 
-    snprintf(filename, sizeof(filename), "%s/%s.psw", directory, prodfull);
+    snprintf(filename, sizeof(filename), "%s/%s.pss", directory, prodfull);
     unlink(filename);
 
     snprintf(filename, sizeof(filename), "%s/%s.readme", directory, prodfull);

@@ -114,19 +114,34 @@ make_directory(const char *directory, /* I - Directory */
 {
     char buffer[8192], /* Filename buffer */
         *bufptr;       /* Pointer into buffer */
+    const char *start; /* Start of directory string, for error messages */
+    int status;        /* Return status */
+
+    start = directory;
+    status = 0;
 
     for (bufptr = buffer; *directory;) {
         if (*directory == '/' && bufptr > buffer) {
             *bufptr = '\0';
 
             if (access(buffer, F_OK)) {
-                mkdir(buffer, 0755);
-                if (mode)
-                    chmod(buffer, mode | 0700);
-                if (!AooMode)
-                    if (owner != (uid_t)-1 && group != (gid_t)-1)
-                        chown(buffer, owner, group);
+                if (mkdir(buffer, 0755) && errno != EEXIST) {
+                    fprintf(stderr, "epm: Unable to create directory \"%s\": %s\n",
+                            buffer, strerror(errno));
+                    status = -1;
+                } else {
+                    if (mode)
+                        chmod(buffer, mode | 0700);
+                    if (!AooMode)
+                        if (owner != (uid_t)-1 && group != (gid_t)-1)
+                            chown(buffer, owner, group);
+                }
             }
+        }
+
+        if (bufptr >= (buffer + sizeof(buffer) - 1)) {
+            fprintf(stderr, "epm: Directory path \"%s\" is too long.\n", start);
+            return (-1);
         }
 
         *bufptr++ = *directory++;
@@ -135,15 +150,20 @@ make_directory(const char *directory, /* I - Directory */
     *bufptr = '\0';
 
     if (access(buffer, F_OK)) {
-        mkdir(buffer, 0755);
-        if (mode)
-            chmod(buffer, mode | 0700);
-        if (!AooMode)
-            if (owner != (uid_t)-1 && group != (gid_t)-1)
-                chown(buffer, owner, group);
+        if (mkdir(buffer, 0755) && errno != EEXIST) {
+            fprintf(stderr, "epm: Unable to create directory \"%s\": %s\n", buffer,
+                    strerror(errno));
+            status = -1;
+        } else {
+            if (mode)
+                chmod(buffer, mode | 0700);
+            if (!AooMode)
+                if (owner != (uid_t)-1 && group != (gid_t)-1)
+                    chown(buffer, owner, group);
+        }
     }
 
-    return (0);
+    return (status);
 }
 
 /*

@@ -81,7 +81,8 @@ All other operating systems default to the <i>portable</i> format.
 <dt><b>-f macos</b>
 <dd style="margin-left: 5.0em"><dt><b>-f macos-signed</b>
 <dd style="margin-left: 5.0em">Generate a macOS software package.
-The <i>macos-signed</i> format uses the signing identity in the EPM_SIGNING_IDENTITY environment variable.
+The <i>macos-signed</i> format signs the package with the installer identity in the EPM_SIGNING_IDENTITY environment variable.
+If EPM_APPLICATION_IDENTITY is also set, the Mach-O files and bundles in the package payload and the resulting disk image are signed with that application identity, and the disk image is notarized when EPM_NOTARY_KEYCHAIN_PROFILE is set.
 <dt><b>-f portable</b>
 <dd style="margin-left: 5.0em">Generate a portable distribution based on shell scripts and tar files.
 The resulting distribution is installed and removed the same way on all operating systems. [default]
@@ -133,6 +134,17 @@ The following environment variables are supported by <b>epm</b>:
 <dl class="man">
 <dt><b>EPM_SIGNING_IDENTITY</b>
 <dd style="margin-left: 5.0em">The common name that should be used when signing a package.
+For the <i>macos-signed</i> format this is an installer identity, typically "Developer ID Installer", and it defaults to that value.
+<dt><b>EPM_APPLICATION_IDENTITY</b>
+<dd style="margin-left: 5.0em">The common name of the application identity, typically "Developer ID Application", used to sign executables and disk images.
+For the <i>macos-signed</i> format, setting this enables signing of the Mach-O files and bundles in the package payload and of the resulting disk image.
+Executables are signed with the hardened runtime, which is required for notarization.
+When this variable is unset no application signing is performed.
+<dt><b>EPM_SIGNING_ENTITLEMENTS</b>
+<dd style="margin-left: 5.0em">The path of an entitlements property list to apply when signing executables with EPM_APPLICATION_IDENTITY.
+<dt><b>EPM_NOTARY_KEYCHAIN_PROFILE</b>
+<dd style="margin-left: 5.0em">The name of a keychain profile created with "xcrun notarytool store-credentials".
+When set together with EPM_APPLICATION_IDENTITY, the <i>macos-signed</i> format submits the disk image to the Apple notary service and staples the resulting ticket to it.
 </dl>
 <h3 class="title"><a name="LIST_FILES">List Files</a></h3>
 The EPM list file format is now described in the <i>epm.list(5)</i>

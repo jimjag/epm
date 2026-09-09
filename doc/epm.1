@@ -97,7 +97,8 @@ All other operating systems default to the \fIportable\fR format.
 .TP 5
 \fB\-f macos\-signed\fR
 Generate a macOS software package.
-The \fImacos\-signed\fR format uses the signing identity in the EPM_SIGNING_IDENTITY environment variable.
+The \fImacos\-signed\fR format signs the package with the installer identity in the EPM_SIGNING_IDENTITY environment variable.
+If EPM_APPLICATION_IDENTITY is also set, the Mach\-O files and bundles in the package payload and the resulting disk image are signed with that application identity, and the disk image is notarized when EPM_NOTARY_KEYCHAIN_PROFILE is set.
 .TP 5
 \fB\-f portable\fR
 Generate a portable distribution based on shell scripts and tar files.
@@ -162,6 +163,20 @@ The following environment variables are supported by \fBepm\fR:
 .TP 5
 .B EPM_SIGNING_IDENTITY
 The common name that should be used when signing a package.
+For the \fImacos\-signed\fR format this is an installer identity, typically "Developer ID Installer", and it defaults to that value.
+.TP 5
+.B EPM_APPLICATION_IDENTITY
+The common name of the application identity, typically "Developer ID Application", used to sign executables and disk images.
+For the \fImacos\-signed\fR format, setting this enables signing of the Mach\-O files and bundles in the package payload and of the resulting disk image.
+Executables are signed with the hardened runtime, which is required for notarization.
+When this variable is unset no application signing is performed.
+.TP 5
+.B EPM_SIGNING_ENTITLEMENTS
+The path of an entitlements property list to apply when signing executables with EPM_APPLICATION_IDENTITY.
+.TP 5
+.B EPM_NOTARY_KEYCHAIN_PROFILE
+The name of a keychain profile created with "xcrun notarytool store\-credentials".
+When set together with EPM_APPLICATION_IDENTITY, the \fImacos\-signed\fR format submits the disk image to the Apple notary service and staples the resulting ticket to it.
 .SH LIST FILES
 The EPM list file format is now described in the \fIepm.list(5)\fR
 man page.

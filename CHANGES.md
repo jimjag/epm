@@ -4,6 +4,15 @@ Changes in EPM
 Changes in EPM 5.0.1
 --------------------
 
+- macOS: the `macos-signed` format can now apply Developer ID Application
+  signing. Setting `EPM_APPLICATION_IDENTITY` signs the Mach-O files and
+  `.app`/`.framework`/`.bundle` directories in the package payload with the
+  hardened runtime, then signs the disk image; `EPM_SIGNING_ENTITLEMENTS`
+  supplies an optional entitlements plist. Setting `EPM_NOTARY_KEYCHAIN_PROFILE`
+  additionally submits the disk image to the Apple notary service and staples
+  the ticket. Behavior is unchanged when `EPM_APPLICATION_IDENTITY` is unset
+- macOS: a failing `pkgbuild` is now reported and aborts the build instead of
+  being silently ignored
 - Added support for `%literal(config)` and `%literal(templates)` sections in
   Debian packages, generating the DEBIAN/config and DEBIAN/templates files
   (debconf) (PR #16)

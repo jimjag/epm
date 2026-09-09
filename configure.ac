@@ -16,12 +16,12 @@ dnl MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 dnl GNU General Public License for more details.
 dnl
 
-AC_INIT([EPM],[5.0.1],[https://github.com/jimjag/epm/issues],[epm],[https://github.com/jimjag/epm])
+AC_INIT([EPM],[5.1.0],[https://github.com/jimjag/epm/issues],[epm],[https://github.com/jimjag/epm])
 AC_CONFIG_HEADER(config.h)
 
 dnl Version number...
 VERSION="AC_PACKAGE_VERSION"
-VERNUMBER=500
+VERNUMBER=510
 AC_SUBST(VERSION)
 AC_SUBST(VERNUMBER)
 AC_DEFINE_UNQUOTED(EPM_VERSION, "ESP Package Manager (EPM) v$VERSION")

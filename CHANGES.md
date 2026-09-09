@@ -1,7 +1,7 @@
 Changes in EPM
 ==============
 
-Changes in EPM 5.0.1
+Changes in EPM 5.1.0
 --------------------
 
 - File ownership (`user`/`group` in a list file entry) now falls back to a
@@ -26,6 +26,10 @@ Changes in EPM 5.0.1
   the ticket. Behavior is unchanged when `EPM_APPLICATION_IDENTITY` is unset
 - macOS: a failing `pkgbuild` is now reported and aborts the build instead of
   being silently ignored
+
+Changes in EPM 5.0.1
+--------------------
+
 - Added support for `%literal(config)` and `%literal(templates)` sections in
   Debian packages, generating the DEBIAN/config and DEBIAN/templates files
   (debconf) (PR #16)

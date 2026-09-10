@@ -487,6 +487,10 @@ fi
 
 section "Debian backend (deb.c)"
 
+# dpkg-deb builds the archive, so the whole section needs it (Ubuntu has it;
+# a stock macOS runner does not).
+if have dpkg-deb; then
+
 # --- multi-line description is properly escaped in the control file -------
 cat >multiline-desc.list <<EOF
 %product Test
@@ -565,6 +569,9 @@ if "$EPM" --aoo-mode -k -f deb aootest archtest.list >out.log 2>&1; then
 else
     fail "epm --aoo-mode -f deb failed"
     cat out.log
+fi
+else
+    skip "Debian backend build (needs dpkg-deb)"
 fi
 
 section "Portable backend (portable.c / tar.c)"

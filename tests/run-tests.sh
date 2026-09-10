@@ -189,7 +189,7 @@ fi
 if compile_test "$SCRATCH/test_macos_signing" "$ROOT/tests/unit/test_macos_signing.c" \
     "$LIBEPM"; then
     if "$SCRATCH/test_macos_signing" >"$SCRATCH/out.log" 2>&1; then
-        pass "test_macos_signing (Mach-O magic vs Java .class and byte-swapped fat headers; /etc,/var staging)"
+        pass "test_macos_signing (Mach-O magic and filetype; /etc,/var staging; inside-out bundle signing plan)"
     else
         fail "test_macos_signing - see output below"
         cat "$SCRATCH/out.log"

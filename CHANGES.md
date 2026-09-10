@@ -1,6 +1,27 @@
 Changes in EPM
 ==============
 
+Changes in EPM 5.2.0
+--------------------
+
+- macOS: `macos-signed` now signs bundles inside-out. Every Mach-O file found
+  inside a `.app`, `.framework` or `.bundle` is signed individually before the
+  nested bundles and finally the enclosing bundle are sealed, and each
+  bundle's main executable is left to be signed with its bundle. A single
+  `codesign` call on the bundle previously left any Mach-O outside
+  `Contents/MacOS` with only the linker's ad-hoc signature, which the notary
+  service rejects
+- macOS: entitlements from `EPM_SIGNING_ENTITLEMENTS` are now applied only to
+  executables (by Mach-O header filetype) and application bundles, no longer
+  to libraries, frameworks and plug-ins
+- macOS: new `EPM_SIGNING_KEYCHAIN` environment variable passes `--keychain`
+  to `codesign` and `pkgbuild`, for build keychains that are not on the
+  search list
+- macOS: extended attributes are stripped before signing, and every signed
+  bundle, file and disk image is checked with `codesign --verify --strict`
+  (`--deep` for bundles) before the build continues; `-vv` also shows the
+  `spctl` assessment
+
 Changes in EPM 5.1.0
 --------------------
 

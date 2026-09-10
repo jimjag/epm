@@ -1,7 +1,7 @@
 Changes in EPM
 ==============
 
-Changes in EPM 5.2.0
+Changes in EPM 5.1.1
 --------------------
 
 - macOS: `macos-signed` now signs bundles inside-out. Every Mach-O file found

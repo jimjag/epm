@@ -1,7 +1,7 @@
 dnl
 dnl Configuration script for the ESP Package Manager (EPM).
 dnl
-dnl Copyright © 2020 by Jim Jagielski
+dnl Copyright © 2020-2026 by Jim Jagielski
 dnl Copyright © 1999-2020 by Michael R Sweet
 dnl Copyright © 1999-2007 by Easy Software Products, all rights reserved.
 dnl
@@ -16,7 +16,7 @@ dnl MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 dnl GNU General Public License for more details.
 dnl
 
-AC_INIT([EPM],[5.1.0],[https://github.com/jimjag/epm/issues],[epm],[https://github.com/jimjag/epm])
+AC_INIT([EPM],[5.1.1],[https://github.com/jimjag/epm/issues],[epm],[https://github.com/jimjag/epm])
 AC_CONFIG_HEADER(config.h)
 
 dnl Version number...

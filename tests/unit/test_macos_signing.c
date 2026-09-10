@@ -267,7 +267,7 @@ int main(void) {
 #undef PUT
 #undef PLIST
 
-        CHECK(!plan_bundle(&plan, app), "plan_bundle() succeeds on a nested application");
+        CHECK(!plan_bundle(&plan, app, NULL), "plan_bundle() succeeds on a nested application");
 
         {
             static const struct {
@@ -330,7 +330,7 @@ int main(void) {
                      dir, app, dir);
             system(cmd);
 
-            CHECK(!sign_payload(dir, "prod", &dist, "-", NULL, NULL),
+            CHECK(!sign_payload(dir, "prod", &dist, NULL, 1, "-", NULL, NULL),
                   "sign_payload() ad-hoc signs and verifies a nested application");
 
             snprintf(cmd, sizeof(cmd),
@@ -350,6 +350,93 @@ int main(void) {
         } else
             printf("    skipped - codesign not available\n");
 #endif
+    }
+
+    /*
+     * Bundle suffixes, identifiers, ad-hoc detection and the runtime switch.
+     */
+
+    CHECK(is_bundle("Foo.xpc", 7) && is_bundle("Foo.appex", 9) &&
+              is_bundle("Foo.mdimporter", 14) && is_bundle("Foo.qlgenerator", 15) &&
+              is_bundle("Foo.plugin", 10) && is_bundle("Foo.prefPane", 12) &&
+              is_bundle("Foo.saver", 9),
+          "XPC services, extensions, importers, generators and panes are bundles");
+    CHECK(!is_bundle("Foo.kext", 8) && !is_bundle(".app", 4) && !is_bundle("app", 3),
+          "kexts, a bare suffix and a plain name are not bundles");
+
+    CHECK(adhoc_identity("-") && !adhoc_identity("Developer ID Application") &&
+              !adhoc_identity(NULL),
+          "only \"-\" is the ad-hoc identity");
+
+    {
+        char buf[256];
+
+        unsetenv("EPM_MACOS_IDENTIFIER");
+        product_identifier("prod", NULL, buf, sizeof(buf));
+        CHECK(!strcmp(buf, "prod"), "the identifier defaults to the product name");
+        product_identifier("prod", "docs", buf, sizeof(buf));
+        CHECK(!strcmp(buf, "prod-docs"), "a subpackage identifier defaults to the full name");
+
+        setenv("EPM_MACOS_IDENTIFIER", "org.example.prod", 1);
+        product_identifier("prod", NULL, buf, sizeof(buf));
+        CHECK(!strcmp(buf, "org.example.prod"), "EPM_MACOS_IDENTIFIER overrides the identifier");
+        product_identifier("prod", "docs", buf, sizeof(buf));
+        CHECK(!strcmp(buf, "org.example.prod.docs"),
+              "a subpackage is appended to the overridden identifier");
+        unsetenv("EPM_MACOS_IDENTIFIER");
+
+        unsetenv("EPM_SIGNING_HARDENED_RUNTIME");
+        CHECK(hardened_runtime(), "the hardened runtime is on by default");
+        setenv("EPM_SIGNING_HARDENED_RUNTIME", "no", 1);
+        CHECK(!hardened_runtime(), "EPM_SIGNING_HARDENED_RUNTIME=no turns it off");
+        setenv("EPM_SIGNING_HARDENED_RUNTIME", "yes", 1);
+        CHECK(hardened_runtime(), "any other value leaves it on");
+        unsetenv("EPM_SIGNING_HARDENED_RUNTIME");
+    }
+
+    /*
+     * notarytool JSON and the component plist rewrite.
+     */
+
+    {
+        char value[64];
+        static const char json[] =
+            "{\n  \"id\" : \"abc-123\",\n  \"message\" : \"Processing complete\",\n"
+            "  \"status\" : \"Invalid\"\n}\n";
+
+        CHECK(!json_string(json, "status", value, sizeof(value)) && !strcmp(value, "Invalid"),
+              "json_string() reads the submission status");
+        CHECK(!json_string(json, "id", value, sizeof(value)) && !strcmp(value, "abc-123"),
+              "json_string() reads the submission id");
+        CHECK(json_string(json, "missing", value, sizeof(value)),
+              "json_string() reports a missing key");
+        CHECK(json_string("Error: bad request", "status", value, sizeof(value)),
+              "json_string() reports plain-text output as missing");
+    }
+
+    {
+        char plist[1024], cmd[2048];
+        static const char before[] =
+            "<plist version=\"1.0\">\n<array>\n\t<dict>\n"
+            "\t\t<key>BundleIsRelocatable</key>\n\t\t<true/>\n"
+            "\t\t<key>BundleIsVersionChecked</key>\n\t\t<true/>\n"
+            "\t\t<key>RootRelativeBundlePath</key>\n\t\t<string>Applications/A.app</string>\n"
+            "\t</dict>\n\t<dict>\n"
+            "\t\t<key>BundleIsRelocatable</key>\n\t\t<false/>\n"
+            "\t\t<key>RootRelativeBundlePath</key>\n\t\t<string>Applications/B.app</string>\n"
+            "\t</dict>\n</array>\n</plist>\n";
+
+        make_directory(dir, 0755, 0, 0);
+        snprintf(plist, sizeof(plist), "%s/Component.plist", dir);
+        write_file(plist, (const unsigned char *)before, sizeof(before) - 1);
+
+        CHECK(!pin_component_bundles(plist), "pin_component_bundles() rewrites the plist");
+
+        snprintf(cmd, sizeof(cmd),
+                 "test \"$(grep -c '<true/>' '%s')\" = 1 && "
+                 "! grep -A1 BundleIsRelocatable '%s' | grep -q '<true/>'",
+                 plist, plist);
+        CHECK(!system(cmd), "every BundleIsRelocatable is false and other keys are untouched");
     }
 
     unlink_directory(dir);

@@ -4,6 +4,37 @@ Changes in EPM
 Changes in EPM 5.1.1
 --------------------
 
+- macOS: packages are now product archives built with `productbuild` from
+  one component per `%subpackage`. Installer shows the `%license`, `%readme`
+  and `%description` of the list file, which the `pkgbuild`-only package
+  dropped, and offers each subpackage as an install choice. The package
+  identifier can be set with `EPM_MACOS_IDENTIFIER`, usually from the list
+  file, instead of always being the product name
+- macOS: a build that is not run as root no longer bakes the builder's uid
+  into the payload; `pkgbuild --ownership recommended` is used instead, with
+  a warning that the list file's owners are not applied
+- macOS: application bundles in the payload are pinned to their list-file
+  path (`BundleIsRelocatable` off) instead of being relocated to any older
+  copy Spotlight knows about
+- macOS: `i` entries also install a launchd job that runs the StartupItem
+  script at boot on releases without SystemStarter (10.10 and later); the
+  StartupItem itself is unchanged for older releases
+- macOS: new `macos-app` format builds a drag-install disk image holding the
+  application bundles, an `/Applications` link and the `%license` as a
+  license agreement shown before mounting
+- macOS: disk images are created as HFS+ with the product name as the volume
+  name, so they mount on releases before APFS
+- macOS: `macos-signed` verifies the package signature with `pkgutil`,
+  notarizes and staples the package before it goes into the disk image, and
+  reports a rejected notarization with the notary log instead of failing at
+  stapling. `EPM_APPLICATION_IDENTITY=-` (ad-hoc) now completes a local build
+  without asking for a timestamp or signing the package and image, and a
+  missing `EPM_APPLICATION_IDENTITY` is warned about
+- macOS: a list file entry can name its own entitlements with
+  `entitlements(file)`; `EPM_SIGNING_HARDENED_RUNTIME=no` turns the hardened
+  runtime off for local builds; `.plugin`, `.xpc`, `.appex`, `.mdimporter`,
+  `.qlgenerator`, `.prefPane` and `.saver` bundles are now sealed as bundles
+- CI: the build and test suite also run on a macOS runner
 - macOS: `macos-signed` now signs bundles inside-out. Every Mach-O file found
   inside a `.app`, `.framework` or `.bundle` is signed individually before the
   nested bundles and finally the enclosing bundle are sealed, and each

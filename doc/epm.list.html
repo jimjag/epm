@@ -129,11 +129,12 @@ Configuration files are installed as "destination.N" if the destination already 
 <dd style="margin-left: 5.0em"><dt>D <i>mode user group destination -</i>
 <dd style="margin-left: 5.0em">Specifies a directory should be created when installing the software.
 The second form specifies that the directory is new and should be included as part of a patch.
-<dt>f <i>mode user group destination source [nostrip()]</i>
-<dd style="margin-left: 5.0em"><dt>F <i>mode user group destination source [nostrip()]</i>
+<dt>f <i>mode user group destination source [nostrip()] [entitlements(file)]</i>
+<dd style="margin-left: 5.0em"><dt>F <i>mode user group destination source [nostrip()] [entitlements(file)]</i>
 <dd style="margin-left: 5.0em">Specifies a file for installation.
 The second form specifies that the file has changed or is new and should be included as part of a patch.
 If the "nostrip()" option is included, the file will not be stripped before the installation is created.
+The "entitlements(<i>file</i>)" option names the entitlements property list used when the file, or the macOS bundle it is part of, is signed; it overrides EPM_SIGNING_ENTITLEMENTS for that file or bundle.
 <dt>f <i>mode user group destination source/pattern [nostrip()]</i>
 <dd style="margin-left: 5.0em"><dt>F <i>mode user group destination source/pattern [nostrip()]</i>
 <dd style="margin-left: 5.0em">Specifies one or more files for installation using shell wildcard patterns.
@@ -144,6 +145,7 @@ If the "nostrip()" option is included, the file will not be stripped before the 
 <dd style="margin-left: 5.0em">Specifies an initialization script for installation.
 The second form specifies that the file has changed or is new and should be included as part of a patch.
 Initialization scripts are stored in /etc/software/init.d and are linked to the appropriate system-specific directories for run levels 0, 2, 3, and 5.
+On macOS the script is installed as a StartupItem for releases with SystemStarter and also as a launchd job, /Library/LaunchDaemons/<i>identifier.service-name</i>.plist, which runs the script with the <i>start</i> argument at boot on later releases.
 Initialization scripts <b>must</b> accept at least the <i>start</i> and <i>stop</i> commands.
 The optional <i>options</i> following the source filename can be any of the following:
 <dt>     order(<i>string</i>)

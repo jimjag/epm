@@ -97,10 +97,20 @@ All other operating systems default to the \fIportable\fR format.
 .TP 5
 \fB\-f macos\-signed\fR
 Generate a macOS software package.
-The \fImacos\-signed\fR format signs the package with the installer identity in the EPM_SIGNING_IDENTITY environment variable.
-If EPM_APPLICATION_IDENTITY is also set, the Mach\-O files and bundles in the package payload and the resulting disk image are signed with that application identity, and the disk image is notarized when EPM_NOTARY_KEYCHAIN_PROFILE is set.
+The output is a product archive built with productbuild from one component package per subpackage, wrapped in a disk image.
+Installer shows the %license, %readme and %description of the list file, and offers each %subpackage as an install choice named by its first %description line.
+Application bundles in the payload are installed at the path given in the list file rather than relocated to an existing copy.
+Initialization scripts get both a StartupItem and a launchd job, so they start on every macOS release.
+When \fBepm\fR is not run as root the owners and groups in the list file cannot be applied and pkgbuild's recommended ownership is used instead.
+The \fImacos\-signed\fR format signs the product archive with the installer identity in the EPM_SIGNING_IDENTITY environment variable and checks it with pkgutil.
+If EPM_APPLICATION_IDENTITY is also set, the Mach\-O files and bundles in the package payload and the resulting disk image are signed with that application identity, and both the package and the disk image are notarized and stapled when EPM_NOTARY_KEYCHAIN_PROFILE is set.
 Bundles are signed inside\-out: every Mach\-O file inside a bundle is signed first, nested bundles are sealed next, and the enclosing bundle last, so notarization sees a signature on every code object.
 Each signed bundle, file and disk image is then checked with "codesign \-\-verify \-\-strict".
+.TP 5
+\fB\-f macos\-app\fR
+Generate a macOS drag\-install disk image.
+Every file in the list must live under /Applications; the image holds those application bundles, a link to /Applications to drag them onto, and the %license as an agreement shown before the image mounts.
+When EPM_APPLICATION_IDENTITY is set the bundles are signed as for \fImacos\-signed\fR, each application is notarized and stapled before it goes on the image when EPM_NOTARY_KEYCHAIN_PROFILE is set, and the image itself is then signed and notarized.
 .TP 5
 \fB\-f portable\fR
 Generate a portable distribution based on shell scripts and tar files.
@@ -169,13 +179,19 @@ For the \fImacos\-signed\fR format this is an installer identity, typically "Dev
 .TP 5
 .B EPM_APPLICATION_IDENTITY
 The common name of the application identity, typically "Developer ID Application", used to sign executables and disk images.
-For the \fImacos\-signed\fR format, setting this enables signing of the Mach\-O files and bundles in the package payload and of the resulting disk image.
+For the \fImacos\-signed\fR and \fImacos\-app\fR formats, setting this enables signing of the Mach\-O files and bundles in the payload and of the resulting disk image.
 Executables are signed with the hardened runtime, which is required for notarization.
-When this variable is unset no application signing is performed.
+The value "\-" selects the ad\-hoc identity: the payload is signed without a certificate or timestamp, and the package and disk image are left unsigned, which is enough for a local build.
+When this variable is unset no application signing is performed and \fImacos\-signed\fR prints a warning.
 .TP 5
 .B EPM_SIGNING_ENTITLEMENTS
 The path of an entitlements property list to apply when signing executables with EPM_APPLICATION_IDENTITY.
 Entitlements are applied to executables and application bundles only; libraries, frameworks and plug\-ins run under their host's.
+A list file entry can name its own with the "entitlements(\fIfile\fR)" option, see \fIepm.list(5)\fR.
+.TP 5
+.B EPM_SIGNING_HARDENED_RUNTIME
+Set to "no" to sign without the hardened runtime.
+Notarization requires the hardened runtime, so this only makes sense for local builds.
 .TP 5
 .B EPM_SIGNING_KEYCHAIN
 The path of the keychain holding the signing identities, passed to codesign and pkgbuild as \-\-keychain.
@@ -183,7 +199,13 @@ When unset the keychain search list is used.
 .TP 5
 .B EPM_NOTARY_KEYCHAIN_PROFILE
 The name of a keychain profile created with "xcrun notarytool store\-credentials".
-When set together with EPM_APPLICATION_IDENTITY, the \fImacos\-signed\fR format submits the disk image to the Apple notary service and staples the resulting ticket to it.
+When set together with EPM_APPLICATION_IDENTITY, the \fImacos\-signed\fR format submits the product package and then the disk image to the Apple notary service and staples the resulting tickets, and the \fImacos\-app\fR format does the same for each application and the image.
+A rejected submission fails the build and prints the notary log.
+.TP 5
+.B EPM_MACOS_IDENTIFIER
+The reverse\-DNS package identifier, for example "org.example.product", that macOS records in its receipts.
+Subpackages append their name to it.
+It defaults to the product name, and is usually set in the list file with "$EPM_MACOS_IDENTIFIER=...".
 .SH LIST FILES
 The EPM list file format is now described in the \fIepm.list(5)\fR
 man page.

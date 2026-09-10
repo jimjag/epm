@@ -671,16 +671,16 @@ EOF
     rm -rf "$SPACEDIR"
 
     # --- signing command lines are quoted -----------------------------------
-    # pkgbuild --sign and codesign need a real Developer ID to succeed, which
-    # CI does not have.  run_command() echoes each command at -vv *before*
-    # forking, so the quoting can still be checked: assert the paths arrive as
-    # single quoted arguments even though the tools themselves then fail.
+    # productbuild --sign and codesign need a real Developer ID to succeed,
+    # which CI does not have.  run_command() echoes each command at -vv
+    # *before* forking, so the quoting can still be checked: assert the paths
+    # arrive as single quoted arguments even though the tools then fail.
     SPACEDIR="$WORK/signed out dir"
     rm -rf "$SPACEDIR"
     mkdir -p "$SPACEDIR"
 
     # No EPM_APPLICATION_IDENTITY, so payload signing is skipped and the run
-    # reaches the "pkgbuild --sign" call.
+    # reaches the "productbuild --sign" call.
     unset EPM_APPLICATION_IDENTITY
     EPM_SIGNING_IDENTITY="Some Signer (O'Brien)" \
         run_with_timeout 120 out.log "$EPM" -vv -f macos-signed \
@@ -688,12 +688,20 @@ EOF
 
     sign_pat="--sign 'Some Signer (O\\'Brien)'"
     if grep -Fq -- "--root '$SPACEDIR/signedtest/Package'" out.log &&
-        grep -Fq -- "--scripts '$SPACEDIR/signedtest/Resources'" out.log &&
+        grep -Fq -- "--scripts '$SPACEDIR/signedtest/Scripts'" out.log &&
+        grep -Fq -- "--package-path '$SPACEDIR/signedtest/Components'" out.log &&
+        grep -Fq -- "productbuild --distribution '$SPACEDIR/signedtest/Distribution'" out.log &&
         grep -Fq -- "$sign_pat" out.log; then
-        pass "pkgbuild --sign receives quoted paths and a quoted identity"
+        pass "pkgbuild and productbuild receive quoted paths and a quoted identity"
     else
-        fail "pkgbuild --sign command line was not quoted as expected"
-        grep -i pkgbuild out.log | head -2
+        fail "pkgbuild/productbuild command lines were not quoted as expected"
+        grep -i "pkgbuild\|productbuild" out.log | head -3
+    fi
+
+    if grep -q "EPM_APPLICATION_IDENTITY is not set" out.log; then
+        pass "macos-signed without EPM_APPLICATION_IDENTITY warns about the unsigned payload"
+    else
+        fail "no warning for macos-signed without EPM_APPLICATION_IDENTITY"
     fi
 
     # With an identity set and a Mach-O in the payload, codesign is reached.
@@ -721,8 +729,203 @@ EOF
         grep -i codesign out.log | head -2
     fi
 
-    unset EPM_APPLICATION_IDENTITY
+    # --- ad-hoc identity builds end to end -----------------------------------
+    # "-" needs no certificate, so this is the one signed build CI can finish:
+    # the payload is signed and verified, the package and image are left
+    # unsigned, and nothing asks Apple for a timestamp.
     rm -rf "$SPACEDIR"
+    mkdir -p "$SPACEDIR"
+
+    EPM_APPLICATION_IDENTITY=- \
+        run_with_timeout 120 out.log "$EPM" -vv -k -f macos-signed \
+        --output-dir "$SPACEDIR" machotest machotest.list
+    status=$?
+
+    if [ "$status" != 0 ]; then
+        fail "ad-hoc macos-signed build failed"
+        cat out.log
+    elif grep -q -- "--timestamp" out.log; then
+        fail "ad-hoc signing still asked for a secure timestamp"
+    elif ! grep -q "product package is not signed" out.log ||
+        ! grep -q "disk image is not signed" out.log; then
+        fail "ad-hoc build did not report the unsigned package and image"
+        cat out.log
+    elif ! codesign --verify --strict "$SPACEDIR/machotest/Package/usr/local/bin/epm" \
+        >/dev/null 2>&1; then
+        fail "ad-hoc signed payload does not verify"
+    elif [ ! -f "$SPACEDIR/machotest.pkg" ]; then
+        fail "ad-hoc build produced no product package"
+    else
+        pass "an ad-hoc macos-signed build signs the payload and skips package and image signing"
+    fi
+
+    # --- the product archive: ownership, resources, choices ----------------
+    # A non-root build cannot chown the staging tree, so the Bom must show
+    # pkgbuild's recommended owners rather than the builder's uid.
+    EXPAND="$WORK/expanded"
+    rm -rf "$EXPAND"
+
+    if [ "$(id -u)" != 0 ] && pkgutil --expand "$SPACEDIR/machotest.pkg" "$EXPAND" >/dev/null 2>&1; then
+        if lsbom -p UGf "$EXPAND/machotest.pkg/Bom" 2>/dev/null | grep -q "^$(id -un)"; then
+            fail "a non-root build baked the builder's uid into the payload"
+            lsbom -p UGf "$EXPAND/machotest.pkg/Bom" | head -3
+        else
+            pass "a non-root build gets pkgbuild's recommended ownership"
+        fi
+
+        if grep -q '<readme file="payload.txt"/>' "$EXPAND/Distribution" &&
+            [ -f "$EXPAND/Resources/payload.txt" ]; then
+            pass "the product archive carries the %readme resource"
+        else
+            fail "the product archive lacks the %readme resource"
+            cat "$EXPAND/Distribution"
+        fi
+    else
+        skip "product archive inspection (needs a non-root build and pkgutil)"
+    fi
+
+    # --- subpackages, init scripts, identifiers and bundle relocation --------
+    printf '#!/bin/sh\necho "$1"\n' >svc.sh
+    mkdir -p Fake.app/Contents/MacOS
+    cp /bin/ls Fake.app/Contents/MacOS/Fake
+    printf '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>org.example.fake</string><key>CFBundleExecutable</key><string>Fake</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>' \
+        >Fake.app/Contents/Info.plist
+
+    cat >subtest.list <<EOF
+\$EPM_MACOS_IDENTIFIER=org.example.sub
+%product Sub Test
+%copyright 2026
+%vendor Me
+%readme payload.txt
+%version 1.0
+%description Main package
+d 0755 root admin /Applications/Fake.app -
+f 0644 root admin /Applications/Fake.app/Contents/Info.plist Fake.app/Contents/Info.plist
+f 0755 root admin /Applications/Fake.app/Contents/MacOS/Fake Fake.app/Contents/MacOS/Fake
+i 0755 root wheel fakesvc svc.sh
+%subpackage extras
+%description Extras
+%description Extra things
+f 0644 root wheel /usr/local/share/subtest/extra.txt payload.txt
+%postinstall echo extras
+EOF
+
+    rm -rf "$SPACEDIR"
+    mkdir -p "$SPACEDIR"
+
+    run_with_timeout 120 out.log "$EPM" -k -f macos --output-dir "$SPACEDIR" \
+        subtest subtest.list
+    status=$?
+
+    if [ "$status" != 0 ]; then
+        fail "macos build with a subpackage, an init script and an application failed"
+        cat out.log
+    else
+        pass "a macos build with a subpackage, an init script and an application succeeds"
+
+        if [ -f "$SPACEDIR/subtest/Components/subtest.pkg" ] &&
+            [ -f "$SPACEDIR/subtest/Components/subtest-extras.pkg" ] &&
+            grep -q '<choice id="org.example.sub.extras" title="Extras" description="Extra things">' \
+                "$SPACEDIR/subtest/Distribution" &&
+            grep -q '<pkg-ref id="org.example.sub" version="1.0"' "$SPACEDIR/subtest/Distribution"; then
+            pass "each subpackage is a component with its own installer choice and identifier"
+        else
+            fail "subpackage components or Distribution choices are missing"
+            cat "$SPACEDIR/subtest/Distribution"
+        fi
+
+        if grep -q "echo extras" "$SPACEDIR/subtest-extras/Scripts/postinstall" 2>/dev/null &&
+            ! grep -q "echo extras" "$SPACEDIR/subtest/Scripts/postinstall"; then
+            pass "%postinstall lines stay with their subpackage"
+        else
+            fail "%postinstall lines were not split by subpackage"
+        fi
+
+        LAUNCHD="$SPACEDIR/subtest/Package/Library/LaunchDaemons/org.example.sub.fakesvc.plist"
+        if [ -f "$SPACEDIR/subtest/Package/Library/StartupItems/fakesvc/fakesvc" ] &&
+            [ -f "$LAUNCHD" ] && plutil -lint "$LAUNCHD" >/dev/null 2>&1 &&
+            grep -q "SystemStarter" "$SPACEDIR/subtest/Scripts/postinstall" &&
+            grep -q "launchctl bootstrap system /Library/LaunchDaemons/org.example.sub.fakesvc.plist" \
+                "$SPACEDIR/subtest/Scripts/postinstall"; then
+            pass "an init script gets both a StartupItem and a launchd job"
+        else
+            fail "init script staging is incomplete"
+            cat "$SPACEDIR/subtest/Scripts/postinstall" 2>/dev/null
+        fi
+
+        if grep -A1 BundleIsRelocatable "$SPACEDIR/subtest/Component.plist" 2>/dev/null |
+            grep -q '<false/>' &&
+            ! grep -A1 BundleIsRelocatable "$SPACEDIR/subtest/Component.plist" |
+            grep -q '<true/>'; then
+            pass "application bundles are pinned to their list-file path"
+        else
+            fail "the component plist does not pin the application bundle"
+            cat "$SPACEDIR/subtest/Component.plist" 2>/dev/null
+        fi
+    fi
+
+    # --- the drag-install image ------------------------------------------
+    cat >apptest.list <<EOF
+%product App Test
+%copyright 2026
+%vendor Me
+%readme payload.txt
+%license payload.txt
+%version 1.0
+d 0755 root admin /Applications/Fake.app -
+f 0644 root admin /Applications/Fake.app/Contents/Info.plist Fake.app/Contents/Info.plist
+f 0755 root admin /Applications/Fake.app/Contents/MacOS/Fake Fake.app/Contents/MacOS/Fake
+EOF
+
+    rm -rf "$SPACEDIR"
+    mkdir -p "$SPACEDIR"
+
+    EPM_APPLICATION_IDENTITY=- \
+        run_with_timeout 120 out.log "$EPM" -f macos-app --output-dir "$SPACEDIR" \
+        apptest apptest.list
+    status=$?
+
+    APPDMG=$(find "$SPACEDIR" -name 'apptest-1.0*.dmg' | head -1)
+    if [ "$status" != 0 ] || [ -z "$APPDMG" ]; then
+        fail "macos-app build failed"
+        cat out.log
+    else
+        # %license becomes a license agreement the Finder shows before
+        # mounting; hdiutil asks for it on stdin.
+        if echo N | hdiutil attach -noverify -nobrowse -readonly -mountrandom "$WORK" \
+            "$APPDMG" >/dev/null 2>&1; then
+            fail "macos-app image mounted without agreeing to the license"
+        else
+            pass "macos-app images carry the %license agreement"
+        fi
+
+        MOUNT=$(echo Y | hdiutil attach -noverify -nobrowse -readonly -mountrandom "$WORK" \
+            "$APPDMG" 2>/dev/null | awk -F'\t' '/^\/dev\/.*Apple_HFS/ {sub(/^[ \t]+/, "", $NF); print $NF}')
+
+        if [ -z "$MOUNT" ]; then
+            fail "macos-app image does not mount after agreeing to the license"
+        elif [ -d "$MOUNT/Fake.app" ] && [ -L "$MOUNT/Applications" ] &&
+            [ "$(readlink "$MOUNT/Applications")" = /Applications ] &&
+            codesign --verify --strict "$MOUNT/Fake.app" >/dev/null 2>&1; then
+            pass "macos-app images hold the signed application and an /Applications link"
+            hdiutil detach "$MOUNT" -force -quiet >/dev/null 2>&1
+        else
+            fail "macos-app image content is wrong"
+            ls -l "$MOUNT"
+            hdiutil detach "$MOUNT" -force -quiet >/dev/null 2>&1
+        fi
+    fi
+
+    run_with_timeout 120 out.log "$EPM" -f macos-app --output-dir "$SPACEDIR" \
+        apptest machotest.list
+    if [ $? != 0 ] && grep -q "only packages files under /Applications" out.log; then
+        pass "macos-app refuses files outside /Applications"
+    else
+        fail "macos-app accepted a file outside /Applications"
+    fi
+
+    unset EPM_APPLICATION_IDENTITY
+    rm -rf "$SPACEDIR" "$EXPAND" Fake.app
 else
     skip "macOS backend end-to-end build (needs Darwin with pkgbuild and hdiutil)"
 fi

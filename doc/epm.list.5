@@ -204,12 +204,13 @@ D \fImode user group destination -\fR
 Specifies a directory should be created when installing the software.
 The second form specifies that the directory is new and should be included as part of a patch.
 .TP 5
-f \fImode user group destination source [nostrip()]\fR
+f \fImode user group destination source [nostrip()] [entitlements(file)]\fR
 .TP 5
-F \fImode user group destination source [nostrip()]\fR
+F \fImode user group destination source [nostrip()] [entitlements(file)]\fR
 Specifies a file for installation.
 The second form specifies that the file has changed or is new and should be included as part of a patch.
 If the "nostrip()" option is included, the file will not be stripped before the installation is created.
+The "entitlements(\fIfile\fR)" option names the entitlements property list used when the file, or the macOS bundle it is part of, is signed; it overrides EPM_SIGNING_ENTITLEMENTS for that file or bundle.
 .TP 5
 f \fImode user group destination source/pattern [nostrip()]\fR
 .TP 5
@@ -224,6 +225,7 @@ I \fImode user group service-name source ["options"]\fR
 Specifies an initialization script for installation.
 The second form specifies that the file has changed or is new and should be included as part of a patch.
 Initialization scripts are stored in /etc/software/init.d and are linked to the appropriate system-specific directories for run levels 0, 2, 3, and 5.
+On macOS the script is installed as a StartupItem for releases with SystemStarter and also as a launchd job, /Library/LaunchDaemons/\fIidentifier.service-name\fR.plist, which runs the script with the \fIstart\fR argument at boot on later releases.
 Initialization scripts \fBmust\fR accept at least the \fIstart\fR and \fIstop\fR commands.
 The optional \fIoptions\fR following the source filename can be any of the following:
 .TP 10

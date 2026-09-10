@@ -101,6 +101,7 @@ enum {
     PACKAGE_LSB_SIGNED,   /* LSB (RPM) package format (signed) */
     PACKAGE_MACOS,        /* macOS package format */
     PACKAGE_MACOS_SIGNED, /* macOS package format (signed) */
+    PACKAGE_MACOS_APP,    /* macOS drag-install application image */
     PACKAGE_PKG,          /* AT&T package format (AIX, Solaris) */
     PACKAGE_RPM,          /* RedHat package format */
     PACKAGE_RPM_SIGNED,   /* RedHat package format (signed) */

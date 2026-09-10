@@ -69,8 +69,8 @@ main(int argc,     /* I - Number of command-line args */
     int format;              /* Distribution format */
     int show_depend;         /* Show dependencies */
     static char *formats[] = /* Distribution format strings */
-        {"portable", "aix", "bsd", "deb", "inst",  "rpm",       "rpm",      "macos",
-         "macos",    "pkg", "rpm", "rpm", "setld", "slackware", "swinstall"};
+        {"portable", "aix",   "bsd", "deb", "inst",  "rpm",       "rpm",      "macos",
+         "macos",    "macos", "pkg", "rpm", "rpm",   "setld",     "slackware", "swinstall"};
 
     /*
      * Get platform information...
@@ -153,6 +153,8 @@ main(int argc,     /* I - Number of command-line args */
                 else if (!strcasecmp(temp, "macos-signed") ||
                          !strcasecmp(temp, "osx-signed"))
                     format = PACKAGE_MACOS_SIGNED;
+                else if (!strcasecmp(temp, "macos-app"))
+                    format = PACKAGE_MACOS_APP;
                 else if (!strcasecmp(temp, "pkg"))
                     format = PACKAGE_PKG;
                 else if (!strcasecmp(temp, "rpm"))
@@ -509,6 +511,7 @@ main(int argc,     /* I - Number of command-line args */
         break;
     case PACKAGE_MACOS:
     case PACKAGE_MACOS_SIGNED:
+    case PACKAGE_MACOS_APP:
         i = make_macos(format, prodname, directory, platname, dist, &platform, setup);
         break;
     case PACKAGE_PKG:
@@ -606,8 +609,8 @@ static void usage(void) {
     puts("-g");
     puts("    Don't strip executables in distributions.");
     puts("-f "
-         "{aix,bsd,deb,depot,inst,macos,macos-signed,native,pkg,portable,rpm,rpm-signed,"
-         "setld,slackware,swinstall,tardist}");
+         "{aix,bsd,deb,depot,inst,macos,macos-signed,macos-app,native,pkg,portable,rpm,"
+         "rpm-signed,setld,slackware,swinstall,tardist}");
     puts("    Set distribution format.");
     puts("-k");
     puts("    Keep intermediate files (spec files, etc.)");

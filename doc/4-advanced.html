@@ -636,8 +636,9 @@ i 755 root sys foo foo.sh "runlevel(02) start(50) stop(30)"
 
 	<PRE>
 	%literal(templates) &lt;&lt;EOF
-	Template: canpi-server/reboot Type: boolean Description: Would you like to
-	reboot to complete the package installation ?  The package installation
+	Template: canpi-server/reboot
+	Type: boolean
+	Description: Would you like to reboot to complete the package installation ?  The package installation
 	updates the device table overlay definition.  For these changes to take
 	effect the system must be restarted.  The canpi daemon is not started by the
 	package installation as the lack of /dev/can0 will cause it to fail
@@ -654,13 +655,37 @@ i 755 root sys foo foo.sh "runlevel(02) start(50) stop(30)"
 	%literal(changelog) changes.md
 	</PRE>
 
+	<p><strong>Note: </strong>The functionality for packaging the changelog relies on
+		the system being used for software development having the package <CODE><em>debhelper</em></CODE>
+		installed.
+	</p>
+
+	<p>To check for (and install if necessary) <code>debhelper</code> use the commandline package
+		manager <CODE>APT</CODE>.</p>
+	<p>To check for <code>debhelper</code></p>
+	<pre>
+	thornbem@rpi5trixie64: $ <u>apt list debhelper⏎︎</u>
+	debhelper/stable,stable,now 13.24.2 all [installed]
+	thornbem@rpi5trixie64: $
+	</pre>
+	<p>To install the <code>debhelper</code> package</p>
+	<PRE>
+	thornbem@rpi5trixie64: $ <u>sudo apt update↩︎</u>
+		.
+		.
+	thornbem@rpi5trixie64: $ <u>sudo apt install debhelper↩︎</u>
+		.
+		.
+	</PRE>
+
 	<H3>PKG Literal Data</H3>
 
-	<P>PKG packages support request files that are used to do batch
+	<p>
+		PKG packages support request files that are used to do batch
 		installations when installation commands require user input. The
 		<CODE>%literal(request)</CODE> directive can be used to provide this user
 		input:
-	</P>
+	</p>
 
 	<PRE>
 %literal(request) &lt;&lt;EOF

@@ -29,6 +29,53 @@
  */
 
 /*
+ * 'add_changelog_rule()' - Create a DEBIAN/rules file
+ *                          This is a Makefile fragment that calls debhelper to
+ *                          install the specified change log file in
+ *                          /usr/local/share/doc/<pkgname>/changelog
+ */
+static int                                /* O - 0 = success, 1 = fail */
+add_changelog_rule(const char *name,      /* I - package name */
+                   const char *directory) /* directory for distribution files */
+{
+    FILE *fp;
+    const char *dhpath = "/usr/bin/dh";
+    char filename[1024];
+
+    if (access(dhpath, F_OK) == 0)
+    {
+        /* The changelog helper functionality is available */
+        if (Verbosity)
+            puts("Creating rules file...");
+
+        snprintf(filename, sizeof(filename), "%s/%s/DEBIAN/rules", directory, name);
+
+        if ((fp = fopen(filename, "w")) == NULL)
+        {
+            fprintf(stderr, "epm: Unable to create rules file \"%s\": %s\n", filename,
+                    strerror(errno));
+            return (1);
+        }
+
+        fchmod(fileno(fp), 0664);
+
+        fputs("#!/usr/bin/make -f\n", fp);
+        fputs("# " EPM_VERSION "\n\n", fp);
+        fputs("%:\n", fp);
+        fputs("\tdh $@ --with installchangelogs\n", fp);
+
+        fclose(fp);
+    }
+    else
+    {
+        fprintf(stderr, "epm: Unable to process changelogs as debhelper not installed");
+        fprintf(stderr, "epm: see documentation section 4 for details");
+        return (1);
+    }
+    return (0);
+}
+
+/*
  * 'add_size()' - Append Installed-Size tag to DEBIAN/control file
  *                Used for AOO packages
  */
@@ -423,6 +470,7 @@ make_subpackage(const char *prodname,     /* I - Product short name */
 
         fclose(fp);
     }
+
     /*
      * Write the changelog file for DPKG...
      */
@@ -434,26 +482,29 @@ make_subpackage(const char *prodname,     /* I - Product short name */
 
     if (i)
     {
-        if (Verbosity)
-            puts("Creating changelog file...");
-
-        snprintf(filename, sizeof(filename), "%s/%s/DEBIAN/changelog", directory, name);
-
-        if ((fp = fopen(filename, "w")) == NULL)
+        if (!add_changelog_rule(name, directory))
         {
-            fprintf(stderr, "epm: Unable to create changelog file \"%s\": %s\n", filename,
-                    strerror(errno));
-            return (1);
+            if (Verbosity)
+                puts("Creating changelog file...");
+
+            snprintf(filename, sizeof(filename), "%s/%s/DEBIAN/changelog", directory, name);
+
+            if ((fp = fopen(filename, "w")) == NULL)
+            {
+                fprintf(stderr, "epm: Unable to create changelog file \"%s\": %s\n", filename,
+                        strerror(errno));
+                return (1);
+            }
+
+            fchmod(fileno(fp), 0644);
+
+            for (; i > 0; i--, c++)
+                if (c->type == COMMAND_LITERAL && c->subpackage == subpackage &&
+                    !strcmp(c->section, "changelog"))
+                    fprintf(fp, "%s\n", c->command);
+
+            fclose(fp);
         }
-
-        fchmod(fileno(fp), 0644);
-
-        for (; i > 0; i--, c++)
-            if (c->type == COMMAND_LITERAL && c->subpackage == subpackage &&
-                !strcmp(c->section, "changelog"))
-                fprintf(fp, "%s\n", c->command);
-
-        fclose(fp);
     }
 
     /*

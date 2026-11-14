@@ -357,14 +357,14 @@ main(int argc,     /* I - Number of command-line args */
     }
 
     for (i = 0; prodname[i]; i++)
-        if (!isalnum(prodname[i] & 255)) {
+        if (!(isalnum(prodname[i] & 255) || (prodname[i] == '-') || (prodname[i] == '_')))  {
             /*
              * The product name flows unescaped into filenames and into
              * several sh -c invocations in the format backends, so this is a
              * hard requirement, not just a style suggestion...
              */
 
-            puts("epm: Product names should only contain letters and numbers!");
+            printf("epm: invalid character '%c' in product name!\n", prodname[i]);
             usage();
         }
 

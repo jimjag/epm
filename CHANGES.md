@@ -52,6 +52,8 @@ Changes in EPM 5.1.1
   bundle, file and disk image is checked with `codesign --verify --strict`
   (`--deep` for bundles) before the build continues; `-vv` also shows the
   `spctl` assessment
+- Product names may now contain dashes and underscores, as Apache OpenOffice
+  needs (PR #20)
 
 Changes in EPM 5.1.0
 --------------------

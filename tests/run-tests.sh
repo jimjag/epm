@@ -860,14 +860,19 @@ EOF
             cat "$SPACEDIR/subtest/Scripts/postinstall" 2>/dev/null
         fi
 
-        if grep -A1 BundleIsRelocatable "$SPACEDIR/subtest/Component.plist" 2>/dev/null |
-            grep -q '<false/>' &&
-            ! grep -A1 BundleIsRelocatable "$SPACEDIR/subtest/Component.plist" |
-            grep -q '<true/>'; then
+        # Newer pkgbuild omits BundleIsRelocatable from --analyze output, so check
+        # the built package's <relocate> list rather than the component plist.
+        PKGINFO="$SPACEDIR/subtest-expanded/PackageInfo"
+        rm -rf "$SPACEDIR/subtest-expanded"
+        if pkgutil --expand "$SPACEDIR/subtest/Components/subtest.pkg" \
+                "$SPACEDIR/subtest-expanded" >/dev/null 2>&1 &&
+            grep -q '<bundle id="org.example.fake"' "$PKGINFO" &&
+            grep -q '<relocate' "$PKGINFO" &&
+            ! sed -n '/<relocate>/,/<\/relocate>/p' "$PKGINFO" | grep -q '<bundle'; then
             pass "application bundles are pinned to their list-file path"
         else
-            fail "the component plist does not pin the application bundle"
-            cat "$SPACEDIR/subtest/Component.plist" 2>/dev/null
+            fail "the application bundle is relocatable"
+            cat "$PKGINFO" "$SPACEDIR/subtest/Component.plist" 2>/dev/null
         fi
     fi
 
